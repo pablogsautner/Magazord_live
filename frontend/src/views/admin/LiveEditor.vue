@@ -1,5 +1,5 @@
 <script setup>
-import { ref, onMounted } from 'vue';
+import { ref, watch, onMounted } from 'vue';
 import { supabase } from '../../lib/supabase.js';
 
 const props = defineProps({
@@ -10,12 +10,42 @@ const BACKEND_URL = import.meta.env.VITE_BACKEND_URL;
 const ADMIN_API_KEY = import.meta.env.VITE_ADMIN_API_KEY;
 
 const produtos = ref([]);
-const codigoBusca = ref('');
+const nomeBusca = ref('');
+const sugestoes = ref([]);
+const buscandoSugestoes = ref(false);
 const preview = ref(null);
-const urlProduto = ref('');
 const buscando = ref(false);
 const erroBusca = ref('');
 const sincronizando = ref(false);
+let debounceTimer = null;
+
+watch(nomeBusca, (valor) => {
+  preview.value = null;
+  clearTimeout(debounceTimer);
+  if (valor.trim().length < 3) {
+    sugestoes.value = [];
+    return;
+  }
+  debounceTimer = setTimeout(() => buscarSugestoes(valor.trim()), 300);
+});
+
+async function buscarSugestoes(nome) {
+  buscandoSugestoes.value = true;
+  try {
+    const res = await fetch(`${BACKEND_URL}/produtos/buscar?nome=${encodeURIComponent(nome)}`, {
+      headers: { 'x-admin-key': ADMIN_API_KEY },
+    });
+    sugestoes.value = res.ok ? await res.json() : [];
+  } finally {
+    buscandoSugestoes.value = false;
+  }
+}
+
+async function selecionarSugestao(opcao) {
+  sugestoes.value = [];
+  nomeBusca.value = opcao.nome;
+  await buscarProduto(opcao.codigo);
+}
 
 async function carregarProdutos() {
   const { data } = await supabase
@@ -26,13 +56,12 @@ async function carregarProdutos() {
   produtos.value = data ?? [];
 }
 
-async function buscarProduto() {
+async function buscarProduto(codigo) {
   erroBusca.value = '';
   preview.value = null;
-  if (!codigoBusca.value) return;
   buscando.value = true;
   try {
-    const res = await fetch(`${BACKEND_URL}/produtos/${encodeURIComponent(codigoBusca.value)}`, {
+    const res = await fetch(`${BACKEND_URL}/produtos/${encodeURIComponent(codigo)}`, {
       headers: { 'x-admin-key': ADMIN_API_KEY },
     });
     if (!res.ok) throw new Error((await res.json()).message ?? 'Produto não encontrado');
@@ -45,18 +74,17 @@ async function buscarProduto() {
 }
 
 async function adicionarProduto() {
-  if (!preview.value || !urlProduto.value) return;
+  if (!preview.value?.url_produto) return;
   const proximaOrdem = produtos.value.length;
   const { data, error } = await supabase
     .from('live_products')
-    .insert({ ...preview.value, live_id: props.id, url_produto: urlProduto.value, ordem: proximaOrdem })
+    .insert({ ...preview.value, live_id: props.id, ordem: proximaOrdem })
     .select()
     .single();
   if (error) return alert(error.message);
   produtos.value.push(data);
   preview.value = null;
-  codigoBusca.value = '';
-  urlProduto.value = '';
+  nomeBusca.value = '';
 }
 
 async function atualizar(produto, campos) {
@@ -96,18 +124,25 @@ onMounted(carregarProdutos);
     <h1>Produtos da live</h1>
 
     <div class="busca">
-      <input v-model="codigoBusca" placeholder="Código do produto na Magazord" @keyup.enter="buscarProduto" />
-      <button :disabled="buscando" @click="buscarProduto">Buscar</button>
+      <input v-model="nomeBusca" placeholder="Digite o nome do produto (mín. 3 letras)" autocomplete="off" />
+      <span v-if="buscandoSugestoes" class="buscando-indicador">buscando…</span>
+      <ul v-if="sugestoes.length" class="sugestoes">
+        <li v-for="opcao in sugestoes" :key="opcao.codigo" @click="selecionarSugestao(opcao)">
+          {{ opcao.nome }}
+        </li>
+      </ul>
     </div>
     <p v-if="erroBusca" class="erro">{{ erroBusca }}</p>
+    <p v-if="buscando" class="carregando">Carregando produto…</p>
 
     <div v-if="preview" class="preview">
       <img :src="preview.imagem_url" :alt="preview.nome" />
       <div>
         <p>{{ preview.nome }}</p>
         <p>R$ {{ preview.preco }} · estoque: {{ preview.estoque }}</p>
-        <input v-model="urlProduto" placeholder="URL da página do produto na loja" />
-        <button @click="adicionarProduto">Adicionar à live</button>
+        <a v-if="preview.url_produto" :href="preview.url_produto" target="_blank" class="link-produto">{{ preview.url_produto }}</a>
+        <p v-else class="erro">Não achei o link desse produto na loja — confere manualmente antes de adicionar.</p>
+        <button :disabled="!preview.url_produto" @click="adicionarProduto">Adicionar à live</button>
       </div>
     </div>
 
@@ -132,12 +167,33 @@ onMounted(carregarProdutos);
 
 <style scoped>
 .page { max-width: 640px; margin: 0 auto; padding: 1.5rem; font-family: system-ui, sans-serif; }
-.busca { display: flex; gap: 0.5rem; margin: 1rem 0 0; }
-.busca input { flex: 1; padding: 0.5rem; }
+.busca { position: relative; margin: 1rem 0 0; }
+.busca input { width: 100%; padding: 0.5rem; box-sizing: border-box; }
+.buscando-indicador { position: absolute; right: 0.6rem; top: 0.6rem; font-size: 0.75rem; color: #888; }
+.sugestoes {
+  position: absolute;
+  z-index: 10;
+  top: 100%;
+  left: 0;
+  right: 0;
+  margin: 2px 0 0;
+  padding: 0;
+  list-style: none;
+  background: #fff;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  max-height: 260px;
+  overflow-y: auto;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+.sugestoes li { padding: 0.5rem 0.7rem; font-size: 0.85rem; cursor: pointer; border-bottom: 1px solid #f0f0f0; }
+.sugestoes li:last-child { border-bottom: none; }
+.sugestoes li:hover { background: #f5f5f5; }
 .erro { color: #c0392b; font-size: 0.85rem; }
+.carregando { color: #888; font-size: 0.85rem; }
 .preview { display: flex; gap: 0.75rem; border: 1px solid #ddd; border-radius: 8px; padding: 0.75rem; margin-top: 0.75rem; }
 .preview img { width: 64px; height: 64px; object-fit: cover; border-radius: 6px; }
-.preview input { width: 100%; padding: 0.4rem; margin: 0.4rem 0; }
+.link-produto { display: block; font-size: 0.75rem; color: #2563eb; margin: 0.3rem 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 340px; }
 .sync { margin: 1rem 0; }
 .lista { list-style: none; padding: 0; display: flex; flex-direction: column; gap: 0.5rem; }
 .lista li { display: flex; align-items: center; gap: 0.6rem; border: 1px solid #eee; border-radius: 8px; padding: 0.5rem; }

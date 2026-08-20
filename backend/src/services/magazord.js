@@ -33,11 +33,34 @@ async function getPreco(codigoDerivacao) {
   return data[0] ?? null;
 }
 
+async function getLink(codigoDerivacao) {
+  const { data } = await magazordGet(
+    `/v2/site/frontend/produto/${config.magazord.lojaId}/${encodeURIComponent(codigoDerivacao)}`
+  );
+  return data.link;
+}
+
+export async function buscarProdutosPorNome(nome, limite = 15) {
+  const { data } = await magazordGet(`/v2/site/produto?nome=${encodeURIComponent(nome)}&limit=30`);
+
+  const opcoes = [];
+  for (const produto of data.items) {
+    if (!produto.ativo) continue;
+    for (const derivacao of produto.derivacoes ?? []) {
+      if (!derivacao.ativo) continue;
+      opcoes.push({ codigo: derivacao.codigo, nome: derivacao.nome });
+      if (opcoes.length >= limite) return opcoes;
+    }
+  }
+  return opcoes;
+}
+
 export async function lookupProduto(codigoDerivacao) {
-  const [detalhe, estoque, precoInfo] = await Promise.all([
+  const [detalhe, estoque, precoInfo, link] = await Promise.all([
     getDetalhe(codigoDerivacao),
     getEstoque(codigoDerivacao),
     getPreco(codigoDerivacao),
+    getLink(codigoDerivacao),
   ]);
 
   const imagemPrincipal = detalhe.imagens?.find((img) => img.principal) ?? detalhe.imagens?.[0];
@@ -49,5 +72,6 @@ export async function lookupProduto(codigoDerivacao) {
     preco: precoInfo ? Number(precoInfo.precoVenda) : null,
     preco_antigo: precoInfo?.precoAntigo ? Number(precoInfo.precoAntigo) : null,
     estoque,
+    url_produto: link ? `${config.magazord.storefrontBaseUrl}/${link}` : null,
   };
 }

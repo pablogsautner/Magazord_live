@@ -14,6 +14,8 @@ export const config = {
     user: process.env.MAGAZORD_USER || '',
     password: process.env.MAGAZORD_PASSWORD || '',
     tabelaPrecoId: process.env.MAGAZORD_TABELA_PRECO_ID || '1',
+    lojaId: process.env.MAGAZORD_LOJA_ID || '1',
+    storefrontBaseUrl: process.env.MAGAZORD_STOREFRONT_URL || '',
   },
   supabase: {
     url: process.env.SUPABASE_URL || '',
