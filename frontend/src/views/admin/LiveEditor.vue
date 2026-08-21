@@ -1,14 +1,17 @@
 <script setup>
 import { ref, watch, onMounted } from 'vue';
+import { useRouter } from 'vue-router';
 import { supabase } from '../../lib/supabase.js';
+import { backendFetch } from '../../lib/backend.js';
 
 const props = defineProps({
   id: { type: String, required: true },
 });
 
-const BACKEND_URL = import.meta.env.VITE_BACKEND_URL;
-const ADMIN_API_KEY = import.meta.env.VITE_ADMIN_API_KEY;
+const router = useRouter();
 
+const live = ref(null);
+const salvandoLive = ref(false);
 const produtos = ref([]);
 const nomeBusca = ref('');
 const sugestoes = ref([]);
@@ -32,9 +35,7 @@ watch(nomeBusca, (valor) => {
 async function buscarSugestoes(nome) {
   buscandoSugestoes.value = true;
   try {
-    const res = await fetch(`${BACKEND_URL}/produtos/buscar?nome=${encodeURIComponent(nome)}`, {
-      headers: { 'x-admin-key': ADMIN_API_KEY },
-    });
+    const res = await backendFetch(`/produtos/buscar?nome=${encodeURIComponent(nome)}`);
     sugestoes.value = res.ok ? await res.json() : [];
   } finally {
     buscandoSugestoes.value = false;
@@ -47,6 +48,35 @@ async function selecionarSugestao(opcao) {
   await buscarProduto(opcao.codigo);
 }
 
+// Leitura continua direto no Supabase (RLS de leitura é pública); as escritas
+// abaixo passam pelo backend, que é o único lugar com a service_role key.
+async function carregarLive() {
+  const { data } = await supabase.from('lives').select('*').eq('id', props.id).single();
+  live.value = data;
+}
+
+async function salvarLive() {
+  salvandoLive.value = true;
+  try {
+    const res = await backendFetch(`/lives/${props.id}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ titulo: live.value.titulo, youtube_video_id: live.value.youtube_video_id }),
+    });
+    if (!res.ok) throw new Error((await res.json()).message ?? 'Falha ao salvar a live');
+  } catch (err) {
+    alert(err.message);
+  } finally {
+    salvandoLive.value = false;
+  }
+}
+
+async function excluirLive() {
+  if (!confirm('Excluir esta live e todos os produtos vinculados a ela?')) return;
+  const res = await backendFetch(`/lives/${props.id}`, { method: 'DELETE' });
+  if (!res.ok) return alert('Falha ao excluir a live');
+  router.push('/admin/lives');
+}
+
 async function carregarProdutos() {
   const { data } = await supabase
     .from('live_products')
@@ -56,14 +86,21 @@ async function carregarProdutos() {
   produtos.value = data ?? [];
 }
 
+async function mover(produto, direcao) {
+  const res = await backendFetch(`/live-products/${produto.id}/mover`, {
+    method: 'POST',
+    body: JSON.stringify({ direcao }),
+  });
+  if (!res.ok) return alert('Falha ao reordenar');
+  await carregarProdutos();
+}
+
 async function buscarProduto(codigo) {
   erroBusca.value = '';
   preview.value = null;
   buscando.value = true;
   try {
-    const res = await fetch(`${BACKEND_URL}/produtos/${encodeURIComponent(codigo)}`, {
-      headers: { 'x-admin-key': ADMIN_API_KEY },
-    });
+    const res = await backendFetch(`/produtos/${encodeURIComponent(codigo)}`);
     if (!res.ok) throw new Error((await res.json()).message ?? 'Produto não encontrado');
     preview.value = await res.json();
   } catch (err) {
@@ -75,13 +112,12 @@ async function buscarProduto(codigo) {
 
 async function adicionarProduto() {
   if (!preview.value?.url_produto) return;
-  const proximaOrdem = produtos.value.length;
-  const { data, error } = await supabase
-    .from('live_products')
-    .insert({ ...preview.value, live_id: props.id, ordem: proximaOrdem })
-    .select()
-    .single();
-  if (error) return alert(error.message);
+  const res = await backendFetch('/live-products', {
+    method: 'POST',
+    body: JSON.stringify({ ...preview.value, live_id: props.id }),
+  });
+  if (!res.ok) return alert((await res.json()).message ?? 'Falha ao adicionar produto');
+  const data = await res.json();
   produtos.value.push(data);
   preview.value = null;
   nomeBusca.value = '';
@@ -94,18 +130,15 @@ async function atualizar(produto, campos) {
 }
 
 async function remover(produto) {
-  const { error } = await supabase.from('live_products').delete().eq('id', produto.id);
-  if (error) return alert(error.message);
+  const res = await backendFetch(`/live-products/${produto.id}`, { method: 'DELETE' });
+  if (!res.ok) return alert('Falha ao remover o produto');
   produtos.value = produtos.value.filter((p) => p.id !== produto.id);
 }
 
 async function sincronizar() {
   sincronizando.value = true;
   try {
-    const res = await fetch(`${BACKEND_URL}/sync/live/${props.id}`, {
-      method: 'POST',
-      headers: { 'x-admin-key': ADMIN_API_KEY },
-    });
+    const res = await backendFetch(`/sync/live/${props.id}`, { method: 'POST' });
     if (!res.ok) throw new Error('Falha ao sincronizar');
     await carregarProdutos();
   } catch (err) {
@@ -115,13 +148,25 @@ async function sincronizar() {
   }
 }
 
-onMounted(carregarProdutos);
+onMounted(() => {
+  carregarLive();
+  carregarProdutos();
+});
 </script>
 
 <template>
   <div class="page">
     <RouterLink to="/admin/lives">← Lives</RouterLink>
     <h1>Produtos da live</h1>
+
+    <div v-if="live" class="live-edit">
+      <input v-model="live.titulo" placeholder="Título da live" />
+      <input v-model="live.youtube_video_id" placeholder="ID do vídeo do YouTube" />
+      <div class="live-edit-acoes">
+        <button :disabled="salvandoLive" @click="salvarLive">{{ salvandoLive ? 'Salvando…' : 'Salvar' }}</button>
+        <button class="excluir-live" @click="excluirLive">Excluir live</button>
+      </div>
+    </div>
 
     <div class="busca">
       <input v-model="nomeBusca" placeholder="Digite o nome do produto (mín. 3 letras)" autocomplete="off" />
@@ -151,7 +196,11 @@ onMounted(carregarProdutos);
     </button>
 
     <ul class="lista">
-      <li v-for="produto in produtos" :key="produto.id">
+      <li v-for="(produto, idx) in produtos" :key="produto.id">
+        <div class="mover">
+          <button :disabled="idx === 0" @click="mover(produto, -1)">▲</button>
+          <button :disabled="idx === produtos.length - 1" @click="mover(produto, 1)">▼</button>
+        </div>
         <img :src="produto.imagem_url" :alt="produto.nome" />
         <div class="info">
           <strong>{{ produto.nome }}</strong>
@@ -167,6 +216,13 @@ onMounted(carregarProdutos);
 
 <style scoped>
 .page { max-width: 640px; margin: 0 auto; padding: 1.5rem; font-family: system-ui, sans-serif; }
+.live-edit { display: flex; flex-direction: column; gap: 0.5rem; border: 1px solid #eee; border-radius: 8px; padding: 0.75rem; margin-top: 1rem; }
+.live-edit input { padding: 0.5rem; }
+.live-edit-acoes { display: flex; gap: 0.5rem; }
+.excluir-live { color: #c0392b; background: none; border: 1px solid #c0392b; border-radius: 6px; cursor: pointer; }
+.mover { display: flex; flex-direction: column; gap: 2px; }
+.mover button { padding: 0 0.3rem; line-height: 1.1; cursor: pointer; }
+.mover button:disabled { opacity: 0.3; cursor: not-allowed; }
 .busca { position: relative; margin: 1rem 0 0; }
 .busca input { width: 100%; padding: 0.5rem; box-sizing: border-box; }
 .buscando-indicador { position: absolute; right: 0.6rem; top: 0.6rem; font-size: 0.75rem; color: #888; }

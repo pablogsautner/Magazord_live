@@ -1,11 +1,12 @@
 import { Router } from 'express';
 import { lookupProduto, buscarProdutosPorNome } from '../services/magazord.js';
-import { adminAuth } from '../middleware/adminAuth.js';
+import { requireUser } from '../middleware/requireUser.js';
 
 export const produtosRouter = Router();
+produtosRouter.use(requireUser);
 
 // Autocomplete por nome, usado enquanto o admin digita no campo de busca.
-produtosRouter.get('/buscar', adminAuth, async (req, res) => {
+produtosRouter.get('/buscar', async (req, res) => {
   const nome = req.query.nome?.trim();
   if (!nome || nome.length < 3) return res.json([]);
   try {
@@ -17,7 +18,7 @@ produtosRouter.get('/buscar', adminAuth, async (req, res) => {
 });
 
 // Usado pelo admin pra buscar/conferir um produto pelo código antes de adicionar na live.
-produtosRouter.get('/:codigo', adminAuth, async (req, res) => {
+produtosRouter.get('/:codigo', async (req, res) => {
   try {
     const produto = await lookupProduto(req.params.codigo);
     res.json(produto);

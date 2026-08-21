@@ -8,7 +8,11 @@ function required(name) {
 
 export const config = {
   port: process.env.PORT || 3333,
-  adminApiKey: process.env.ADMIN_API_KEY || '',
+  encryptionKey: process.env.ENCRYPTION_KEY || '',
+  superAdminEmails: (process.env.SUPER_ADMIN_EMAILS || '')
+    .split(',')
+    .map((e) => e.trim().toLowerCase())
+    .filter(Boolean),
   magazord: {
     baseUrl: process.env.MAGAZORD_BASE_URL || '',
     user: process.env.MAGAZORD_USER || '',

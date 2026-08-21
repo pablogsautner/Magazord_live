@@ -1,14 +1,23 @@
 import { Router } from 'express';
 import { lookupProduto } from '../services/magazord.js';
 import { getSupabase } from '../services/supabase.js';
-import { adminAuth } from '../middleware/adminAuth.js';
+import { requireUser } from '../middleware/requireUser.js';
+import { empresaIdDaLive, usuarioPertenceAEmpresa } from '../services/tenancy.js';
 
 export const syncRouter = Router();
+syncRouter.use(requireUser);
 
 // Revalida preço/estoque dos produtos ativos de uma live direto na Magazord
 // e grava o snapshot atualizado no Supabase (o Realtime propaga pros viewers).
-syncRouter.post('/live/:liveId', adminAuth, async (req, res) => {
+syncRouter.post('/live/:liveId', async (req, res) => {
   const { liveId } = req.params;
+
+  const empresaId = await empresaIdDaLive(liveId).catch(() => null);
+  if (!empresaId) return res.status(404).json({ error: 'live_nao_encontrada' });
+  if (!(await usuarioPertenceAEmpresa(req.user.id, empresaId))) {
+    return res.status(403).json({ error: 'forbidden' });
+  }
+
   const supabase = getSupabase();
 
   const { data: produtos, error } = await supabase
