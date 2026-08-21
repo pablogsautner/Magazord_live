@@ -19,6 +19,19 @@ const routes = [
     meta: { requiresAuth: true },
   },
   {
+    // Painel interno (nosso, não do cliente) — o backend confere se o usuário
+    // está em SUPER_ADMIN_EMAILS; aqui só exigimos estar logado.
+    path: '/super-admin/empresas',
+    component: () => import('./views/super-admin/Empresas.vue'),
+    meta: { requiresAuth: true },
+  },
+  {
+    path: '/super-admin/empresas/:id',
+    component: () => import('./views/super-admin/EmpresaDetalhe.vue'),
+    props: true,
+    meta: { requiresAuth: true },
+  },
+  {
     // Rota isolada (lazy) que vai dentro do iframe no site da Magazord.
     path: '/player/:liveId',
     component: () => import('./views/player/LivePlayer.vue'),

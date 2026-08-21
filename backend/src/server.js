@@ -1,20 +1,33 @@
 import express from 'express';
 import cors from 'cors';
+import rateLimit from 'express-rate-limit';
 import { config } from './config.js';
 import { produtosRouter } from './routes/produtos.js';
 import { syncRouter } from './routes/sync.js';
 import { livesRouter } from './routes/lives.js';
 import { liveProductsRouter } from './routes/liveProducts.js';
+import { empresasRouter } from './routes/empresas.js';
+import { usuariosRouter } from './routes/usuarios.js';
+import { membrosRouter } from './routes/membros.js';
 
 const app = express();
 app.use(cors());
 app.use(express.json());
+
+const limiteGeral = rateLimit({ windowMs: 15 * 60 * 1000, limit: 300, standardHeaders: true, legacyHeaders: false });
+const limiteInterno = rateLimit({ windowMs: 15 * 60 * 1000, limit: 100, standardHeaders: true, legacyHeaders: false });
+app.use(limiteGeral);
 
 app.get('/health', (req, res) => res.json({ ok: true }));
 app.use('/produtos', produtosRouter);
 app.use('/sync', syncRouter);
 app.use('/lives', livesRouter);
 app.use('/live-products', liveProductsRouter);
+
+// Painel interno (nosso, não do cliente) — exige usuário autenticado presente em SUPER_ADMIN_EMAILS.
+app.use('/empresas', limiteInterno, empresasRouter);
+app.use('/usuarios', limiteInterno, usuariosRouter);
+app.use('/membros', limiteInterno, membrosRouter);
 
 app.listen(config.port, () => {
   console.log(`backend rodando em http://localhost:${config.port}`);
