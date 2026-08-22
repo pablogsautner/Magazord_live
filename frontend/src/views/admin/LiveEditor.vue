@@ -124,8 +124,11 @@ async function adicionarProduto() {
 }
 
 async function atualizar(produto, campos) {
-  const { error } = await supabase.from('live_products').update(campos).eq('id', produto.id);
-  if (error) return alert(error.message);
+  const res = await backendFetch(`/live-products/${produto.id}`, {
+    method: 'PATCH',
+    body: JSON.stringify(campos),
+  });
+  if (!res.ok) return alert('Falha ao atualizar');
   Object.assign(produto, campos);
 }
 

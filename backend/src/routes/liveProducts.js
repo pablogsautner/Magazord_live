@@ -33,6 +33,26 @@ liveProductsRouter.post('/', async (req, res) => {
   res.status(201).json(data);
 });
 
+liveProductsRouter.patch('/:id', async (req, res) => {
+  const empresaId = await empresaIdDoLiveProduct(req.params.id).catch(() => null);
+  if (!empresaId) return res.status(404).json({ error: 'produto_nao_encontrado' });
+  if (!(await usuarioPertenceAEmpresa(req.user.id, empresaId))) {
+    return res.status(403).json({ error: 'forbidden' });
+  }
+
+  const campos = {};
+  if (typeof req.body.ativo === 'boolean') campos.ativo = req.body.ativo;
+  if (typeof req.body.destaque === 'boolean') campos.destaque = req.body.destaque;
+  if (Object.keys(campos).length === 0) {
+    return res.status(400).json({ error: 'nenhum_campo_valido', message: 'Só ativo/destaque podem ser alterados aqui' });
+  }
+
+  const supabase = getSupabase();
+  const { data, error } = await supabase.from('live_products').update(campos).eq('id', req.params.id).select().single();
+  if (error) return res.status(500).json({ error: 'update_failed', message: error.message });
+  res.json(data);
+});
+
 liveProductsRouter.delete('/:id', async (req, res) => {
   const empresaId = await empresaIdDoLiveProduct(req.params.id).catch(() => null);
   if (!empresaId) return res.status(404).json({ error: 'produto_nao_encontrado' });

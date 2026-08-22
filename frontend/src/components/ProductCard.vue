@@ -5,8 +5,9 @@ defineProps({
 });
 
 function abrirProduto(url) {
-  if (window.top) window.top.location.href = url;
-  else window.location.href = url;
+  // Nova aba em vez de navegar a página toda: a live continua tocando na aba
+  // original, e a pessoa decide se quer ir finalizar a compra (igual TikTok Shop).
+  window.open(url, '_blank', 'noopener');
 }
 
 function formatarPreco(valor) {
