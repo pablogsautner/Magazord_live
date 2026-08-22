@@ -44,10 +44,16 @@ livesRouter.patch('/:id', async (c) => {
     return c.json({ error: 'forbidden' }, 403);
   }
 
-  const { titulo, youtube_video_id } = await c.req.json();
+  const { titulo, youtube_video_id, status } = await c.req.json();
+  const STATUS_VALIDOS = ['agendada', 'ao_vivo', 'encerrada'];
+  if (status !== undefined && !STATUS_VALIDOS.includes(status)) {
+    return c.json({ error: 'status_invalido', message: `status deve ser um de: ${STATUS_VALIDOS.join(', ')}` }, 400);
+  }
+
   const campos: Record<string, string> = {};
   if (titulo !== undefined) campos.titulo = titulo;
   if (youtube_video_id !== undefined) campos.youtube_video_id = youtube_video_id;
+  if (status !== undefined) campos.status = status;
 
   const supabase = getSupabase();
   const { data, error } = await supabase.from('lives').update(campos).eq('id', id).select().single();
