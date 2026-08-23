@@ -2,9 +2,32 @@ import { Hono } from 'npm:hono@4';
 import { getSupabase } from '../services/supabase.ts';
 import { requireUser } from '../middleware/requireUser.ts';
 import { empresaUnicaDoUsuario, empresaIdDaLive, usuarioPertenceAEmpresa } from '../services/tenancy.ts';
+import { audienciaAoVivo } from '../services/youtube.ts';
 
 export const livesRouter = new Hono();
 livesRouter.use('*', requireUser);
+
+livesRouter.get('/:id/audiencia', async (c) => {
+  const id = c.req.param('id');
+  const user = c.get('user') as { id: string };
+
+  const empresaId = await empresaIdDaLive(id).catch(() => null);
+  if (!empresaId) return c.json({ error: 'live_nao_encontrada' }, 404);
+  if (!(await usuarioPertenceAEmpresa(user.id, empresaId))) {
+    return c.json({ error: 'forbidden' }, 403);
+  }
+
+  const supabase = getSupabase();
+  const { data: live, error } = await supabase.from('lives').select('youtube_video_id').eq('id', id).single();
+  if (error) return c.json({ error: 'live_nao_encontrada' }, 404);
+
+  try {
+    const audiencia = await audienciaAoVivo((live as any).youtube_video_id);
+    return c.json(audiencia);
+  } catch (err) {
+    return c.json({ error: 'youtube_audiencia_failed', message: (err as Error).message }, 502);
+  }
+});
 
 livesRouter.post('/', async (c) => {
   const { titulo, youtube_video_id } = await c.req.json();

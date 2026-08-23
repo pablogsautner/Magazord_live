@@ -10,6 +10,8 @@ import { cuponsRouter } from './routes/cupons.js';
 import { empresasRouter } from './routes/empresas.js';
 import { usuariosRouter } from './routes/usuarios.js';
 import { membrosRouter } from './routes/membros.js';
+import { configuracoesRouter } from './routes/configuracoes.js';
+import { empresaConfiguracoesRouter } from './routes/empresaConfiguracoes.js';
 
 const app = express();
 app.use(cors());
@@ -25,11 +27,13 @@ app.use('/sync', syncRouter);
 app.use('/lives', livesRouter);
 app.use('/live-products', liveProductsRouter);
 app.use('/cupons', cuponsRouter);
+app.use('/empresa-configuracoes', empresaConfiguracoesRouter);
 
 // Painel interno (nosso, não do cliente) — exige usuário autenticado presente em SUPER_ADMIN_EMAILS.
 app.use('/empresas', limiteInterno, empresasRouter);
 app.use('/usuarios', limiteInterno, usuariosRouter);
 app.use('/membros', limiteInterno, membrosRouter);
+app.use('/configuracoes', limiteInterno, configuracoesRouter);
 
 app.listen(config.port, () => {
   console.log(`backend rodando em http://localhost:${config.port}`);

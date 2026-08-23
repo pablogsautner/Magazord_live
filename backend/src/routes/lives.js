@@ -2,9 +2,29 @@ import { Router } from 'express';
 import { getSupabase } from '../services/supabase.js';
 import { requireUser } from '../middleware/requireUser.js';
 import { empresaUnicaDoUsuario, empresaIdDaLive, usuarioPertenceAEmpresa } from '../services/tenancy.js';
+import { audienciaAoVivo } from '../services/youtube.js';
 
 export const livesRouter = Router();
 livesRouter.use(requireUser);
+
+livesRouter.get('/:id/audiencia', async (req, res) => {
+  const empresaId = await empresaIdDaLive(req.params.id).catch(() => null);
+  if (!empresaId) return res.status(404).json({ error: 'live_nao_encontrada' });
+  if (!(await usuarioPertenceAEmpresa(req.user.id, empresaId))) {
+    return res.status(403).json({ error: 'forbidden' });
+  }
+
+  const supabase = getSupabase();
+  const { data: live, error } = await supabase.from('lives').select('youtube_video_id').eq('id', req.params.id).single();
+  if (error) return res.status(404).json({ error: 'live_nao_encontrada' });
+
+  try {
+    const audiencia = await audienciaAoVivo(live.youtube_video_id);
+    res.json(audiencia);
+  } catch (err) {
+    res.status(502).json({ error: 'youtube_audiencia_failed', message: err.message });
+  }
+});
 
 livesRouter.post('/', async (req, res) => {
   const { titulo, youtube_video_id } = req.body;

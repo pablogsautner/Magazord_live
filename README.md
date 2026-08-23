@@ -7,6 +7,9 @@
   1. `schema.sql` — tabelas `lives` e `live_products`.
   2. `002_empresas_membros.sql` — tabelas `empresas` (uma por cliente do SaaS) e `membros` (liga usuário ↔ empresa).
   3. `003_empresa_id_lives.sql` — liga `lives` a `empresas` e fecha a escrita direta no Supabase (só o backend escreve).
+  4. `004_cupons.sql` — tabela `cupons` (vinculada a uma live).
+  5. `005_configuracoes.sql` — configurações globais da plataforma (chave/valor).
+  6. `006_empresa_configuracoes.sql` — configurações por empresa (nome da loja, tema, cores).
 
 ## Como a autenticação funciona (importante ler antes de mexer)
 
@@ -79,6 +82,17 @@ curl -X POST http://localhost:3333/membros -H "Authorization: Bearer $TOKEN" -H 
 
 Depois disso, criar uma live pelo painel (`POST /lives`) resolve a empresa sozinho — só funciona se o usuário pertencer a exatamente uma empresa (senão dá erro claro pedindo pra falar com o super admin).
 
+### Configurar a audiência ao vivo (YouTube)
+
+1. Cria um projeto em [console.cloud.google.com](https://console.cloud.google.com), ativa a **YouTube Data API v3** (Biblioteca de APIs).
+2. Cria uma credencial do tipo **Chave de API** (não precisa OAuth) e, por segurança, restringe ela pra só poder chamar a YouTube Data API v3.
+3. Salva no sistema (não vai num `.env` — fica na tabela `configuracoes`):
+   ```bash
+   curl -X PUT http://localhost:3333/configuracoes/youtube_api_key \
+     -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+     -d '{"valor": "SUA_CHAVE_AQUI", "criptografado": true}'
+   ```
+
 ## API do backend
 
 Todas as rotas abaixo (exceto onde marcado) exigem `Authorization: Bearer <token>`. Sem token válido: `401`. Sem vínculo com a empresa do recurso: `403`.
@@ -108,10 +122,18 @@ Cria o cupom de verdade na Magazord (funciona no checkout real da loja) e guarda
 
 **Não testado com uma criação real** (por decisão deliberada — evitar criar cupom numa conta de produção sem combinar antes). O formato dos campos foi conferido lendo cupons reais já existentes na conta via `GET`, incluindo um específico não confirmado: não achei um campo de "limite de N usos" na API da Magazord — só um `tipoLimite` que parece indicar *quem* pode usar (geral vs. pessoa específica via CPF/CNPJ), não uma contagem. Confirmar isso no primeiro cupom real.
 
+### Audiência ao vivo (YouTube)
+- **`GET /lives/:id/audiencia`** — quantas pessoas estão assistindo agora. Resposta: `{ ao_vivo: boolean, espectadores: number | null }` (`espectadores` só vem preenchido quando `ao_vivo` é `true` e o YouTube já informou o número). Usa a `youtube_api_key` cadastrada em `/configuracoes` — sem OAuth, sem login do Google, só leitura pública.
+
+### Configurações da empresa (nome da loja, tema, cores)
+Diferente de `/configuracoes` (que é global da plataforma) — isso é por empresa. Leitura é direta no Supabase (`empresa_configuracoes`, RLS pública, pra o player poder aplicar a marca também); essa rota é só pra escrita. Uma linha é criada automaticamente com valores padrão quando a empresa é criada.
+- **`PATCH /empresa-configuracoes/:empresaId`** — atualiza qualquer um de: `nome_loja`, `email_contato`, `fuso_horario`, `idioma`, `cor_primaria`, `cor_destaque`, `raio_borda` (`none`/`sm`/`md`/`lg`/`xl`), `logo_url`, `modo_tema` (`claro`/`escuro`/`sistema`).
+
 ### Painel interno (só `SUPER_ADMIN_EMAILS`)
 - **`GET /empresas`**, **`POST /empresas`**, **`PATCH /empresas/:id`**, **`DELETE /empresas/:id`** — `magazord_password` nunca volta nas respostas (write-only, fica criptografado no banco).
 - **`GET /usuarios`**, **`POST /usuarios`** (`{ email, password }`), **`DELETE /usuarios/:id`** — gerencia usuários do Supabase Auth.
 - **`GET /membros?empresa_id=<id>`**, **`POST /membros`** (`{ user_id, empresa_id, papel }`), **`DELETE /membros/:id`** — liga/desliga usuário de empresa.
+- **`GET /configuracoes`**, **`PUT /configuracoes/:chave`** (`{ valor, criptografado }`) — configurações globais da plataforma (ex: `youtube_api_key`). Valores criptografados nunca voltam na resposta.
 
 ## Segurança — o que já está feito
 

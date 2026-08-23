@@ -61,6 +61,11 @@ empresasRouter.post('/', async (c) => {
     .select(COLUNAS_PUBLICAS)
     .single();
   if (error) return c.json({ error: 'insert_failed', message: error.message }, 500);
+
+  // Cria a config padrão junto — sem isso a tela de configurações da empresa
+  // não teria nenhuma linha pra ler/editar até alguém salvar algo primeiro.
+  await supabase.from('empresa_configuracoes').insert({ empresa_id: (data as any).id, nome_loja: nome });
+
   return c.json(data, 201);
 });
 
