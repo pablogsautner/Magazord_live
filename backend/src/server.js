@@ -6,6 +6,7 @@ import { produtosRouter } from './routes/produtos.js';
 import { syncRouter } from './routes/sync.js';
 import { livesRouter } from './routes/lives.js';
 import { liveProductsRouter } from './routes/liveProducts.js';
+import { cuponsRouter } from './routes/cupons.js';
 import { empresasRouter } from './routes/empresas.js';
 import { usuariosRouter } from './routes/usuarios.js';
 import { membrosRouter } from './routes/membros.js';
@@ -23,6 +24,7 @@ app.use('/produtos', produtosRouter);
 app.use('/sync', syncRouter);
 app.use('/lives', livesRouter);
 app.use('/live-products', liveProductsRouter);
+app.use('/cupons', cuponsRouter);
 
 // Painel interno (nosso, não do cliente) — exige usuário autenticado presente em SUPER_ADMIN_EMAILS.
 app.use('/empresas', limiteInterno, empresasRouter);

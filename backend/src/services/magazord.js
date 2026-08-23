@@ -16,6 +16,20 @@ async function magazordGet(path) {
   return res.json();
 }
 
+async function magazordEnviar(metodo, path, corpo) {
+  const res = await fetch(`${config.magazord.baseUrl}${path}`, {
+    method: metodo,
+    headers: { Authorization: authHeader(), 'Content-Type': 'application/json' },
+    body: JSON.stringify(corpo),
+  });
+  if (!res.ok) {
+    const body = await res.text().catch(() => '');
+    throw new Error(`Magazord ${metodo} ${path} -> HTTP ${res.status}: ${body}`);
+  }
+  if (res.status === 204) return null;
+  return res.json();
+}
+
 async function getDetalhe(codigoDerivacao) {
   const [detalhe] = await magazordGet(`/v3/produtos/derivacao/${encodeURIComponent(codigoDerivacao)}/detail`);
   return detalhe;
@@ -74,4 +88,28 @@ export async function lookupProduto(codigoDerivacao) {
     estoque,
     url_produto: link ? `${config.magazord.storefrontBaseUrl}/${link}` : null,
   };
+}
+
+// tipoDesconto na Magazord: 1 = valor fixo (R$), 2 = percentual (%).
+function tipoDescontoMagazord(tipoDesconto) {
+  return tipoDesconto === 'percentual' ? 2 : 1;
+}
+
+export async function criarCupomDesconto({ codigo, descricao, tipoDesconto, valorDesconto, validoDe, validoAte, valorMinimoPedido }) {
+  const resposta = await magazordEnviar('POST', '/v2/site/cupomDesconto', {
+    codigo,
+    descricao,
+    tipoDesconto: tipoDescontoMagazord(tipoDesconto),
+    valorDesconto,
+    validoDe,
+    validoAte,
+    valorMinimoPedido,
+    loja: Number(config.magazord.lojaId),
+  });
+  return resposta?.data ?? resposta;
+}
+
+export async function atualizarCupomDesconto(magazordCupomId, campos) {
+  const resposta = await magazordEnviar('PATCH', `/v2/site/cupomDesconto/${magazordCupomId}`, campos);
+  return resposta?.data ?? resposta;
 }

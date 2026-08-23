@@ -100,6 +100,14 @@ Todas as rotas abaixo (exceto onde marcado) exigem `Authorization: Bearer <token
 - **`DELETE /live-products/:id`** — remove um produto da live.
 - **`POST /live-products/:id/mover`** — troca a posição (`ordem`) com o vizinho. Body: `{ "direcao": 1 }` (desce) ou `{ "direcao": -1 }` (sobe).
 
+### Cupons de desconto
+Cria o cupom de verdade na Magazord (funciona no checkout real da loja) e guarda a referência aqui (a Magazord não sabe o que é uma "live"). Leitura é direta no Supabase (RLS pública), igual `lives`/`live_products` — essas rotas são só pra escrita.
+- **`POST /cupons`** — cria o cupom. Body: `{ live_id, codigo, descricao, tipo_desconto, valor_desconto, valido_de, valido_ate, valor_minimo_pedido }`, onde `tipo_desconto` é `"percentual"` ou `"fixo"` e as datas são ISO (`validoDe`/`validoAte` na Magazord).
+- **`PATCH /cupons/:id`** — atualiza `ativo`/`descricao`/`valido_ate` (nos dois lados: no nosso banco e na Magazord).
+- **`DELETE /cupons/:id`** — a Magazord não tem endpoint de excluir cupom, então isso desativa (`ativo: false`) nos dois lados, igual já fazemos com produto/live.
+
+**Não testado com uma criação real** (por decisão deliberada — evitar criar cupom numa conta de produção sem combinar antes). O formato dos campos foi conferido lendo cupons reais já existentes na conta via `GET`, incluindo um específico não confirmado: não achei um campo de "limite de N usos" na API da Magazord — só um `tipoLimite` que parece indicar *quem* pode usar (geral vs. pessoa específica via CPF/CNPJ), não uma contagem. Confirmar isso no primeiro cupom real.
+
 ### Painel interno (só `SUPER_ADMIN_EMAILS`)
 - **`GET /empresas`**, **`POST /empresas`**, **`PATCH /empresas/:id`**, **`DELETE /empresas/:id`** — `magazord_password` nunca volta nas respostas (write-only, fica criptografado no banco).
 - **`GET /usuarios`**, **`POST /usuarios`** (`{ email, password }`), **`DELETE /usuarios/:id`** — gerencia usuários do Supabase Auth.

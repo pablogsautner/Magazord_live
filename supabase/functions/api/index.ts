@@ -4,6 +4,7 @@ import { produtosRouter } from './routes/produtos.ts';
 import { syncRouter } from './routes/sync.ts';
 import { livesRouter } from './routes/lives.ts';
 import { liveProductsRouter } from './routes/liveProducts.ts';
+import { cuponsRouter } from './routes/cupons.ts';
 import { empresasRouter } from './routes/empresas.ts';
 import { usuariosRouter } from './routes/usuarios.ts';
 import { membrosRouter } from './routes/membros.ts';
@@ -19,6 +20,7 @@ app.route('/produtos', produtosRouter);
 app.route('/sync', syncRouter);
 app.route('/lives', livesRouter);
 app.route('/live-products', liveProductsRouter);
+app.route('/cupons', cuponsRouter);
 
 // Painel interno (nosso, não do cliente) — exige usuário autenticado presente em SUPER_ADMIN_EMAILS.
 app.route('/empresas', empresasRouter);

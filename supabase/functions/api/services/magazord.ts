@@ -16,6 +16,20 @@ async function magazordGet(path: string) {
   return res.json();
 }
 
+async function magazordEnviar(metodo: string, path: string, corpo: unknown) {
+  const res = await fetch(`${config.magazord.baseUrl}${path}`, {
+    method: metodo,
+    headers: { Authorization: authHeader(), 'Content-Type': 'application/json' },
+    body: JSON.stringify(corpo),
+  });
+  if (!res.ok) {
+    const body = await res.text().catch(() => '');
+    throw new Error(`Magazord ${metodo} ${path} -> HTTP ${res.status}: ${body}`);
+  }
+  if (res.status === 204) return null;
+  return res.json();
+}
+
 async function getDetalhe(codigoDerivacao: string) {
   const [detalhe] = await magazordGet(`/v3/produtos/derivacao/${encodeURIComponent(codigoDerivacao)}/detail`);
   return detalhe;
@@ -74,4 +88,36 @@ export async function lookupProduto(codigoDerivacao: string) {
     estoque,
     url_produto: link ? `${config.magazord.storefrontBaseUrl}/${link}` : null,
   };
+}
+
+// tipoDesconto na Magazord: 1 = valor fixo (R$), 2 = percentual (%).
+function tipoDescontoMagazord(tipoDesconto: string) {
+  return tipoDesconto === 'percentual' ? 2 : 1;
+}
+
+export async function criarCupomDesconto(input: {
+  codigo: string;
+  descricao?: string;
+  tipoDesconto: string;
+  valorDesconto: number;
+  validoDe: string;
+  validoAte: string;
+  valorMinimoPedido?: number;
+}) {
+  const resposta: any = await magazordEnviar('POST', '/v2/site/cupomDesconto', {
+    codigo: input.codigo,
+    descricao: input.descricao,
+    tipoDesconto: tipoDescontoMagazord(input.tipoDesconto),
+    valorDesconto: input.valorDesconto,
+    validoDe: input.validoDe,
+    validoAte: input.validoAte,
+    valorMinimoPedido: input.valorMinimoPedido,
+    loja: Number(config.magazord.lojaId),
+  });
+  return resposta?.data ?? resposta;
+}
+
+export async function atualizarCupomDesconto(magazordCupomId: number, campos: Record<string, unknown>) {
+  const resposta: any = await magazordEnviar('PATCH', `/v2/site/cupomDesconto/${magazordCupomId}`, campos);
+  return resposta?.data ?? resposta;
 }
