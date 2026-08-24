@@ -1,0 +1,142 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>Live</title>
+  <style>
+    html {
+      width: 100%;
+      height: 100%;
+      margin: 0;
+      padding: 0;
+      border: 0;
+      overflow: hidden !important;
+    }
+
+    body {
+      width: 100%;
+      height: 100%;
+      margin: 0;
+      padding: 0;
+      border: 0;
+      overflow: hidden !important;
+      background: black;
+      font-family: sans-serif;
+    }
+
+    iframe {
+      position: fixed !important;
+      top: 0 !important;
+      left: 0 !important;
+      width: 100% !important;
+      height: 100% !important;
+      border: none !important;
+      margin: 0 !important;
+      padding: 0 !important;
+      z-index: 9999 !important;
+    }
+
+    .close-btn {
+      position: fixed;
+      top: 20px;
+      right: 20px;
+      width: 40px;
+      height: 40px;
+      background: rgba(0,0,0,0.6);
+      border: none;
+      color: white;
+      font-size: 28px;
+      cursor: pointer;
+      border-radius: 50%;
+      z-index: 10000;
+      transition: background 0.2s;
+    }
+
+    .close-btn:hover {
+      background: rgba(0,0,0,0.9);
+    }
+
+    .aviso {
+      position: fixed;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: white;
+      text-align: center;
+      padding: 2rem;
+      box-sizing: border-box;
+    }
+  </style>
+</head>
+<body>
+
+<div id="aviso" class="aviso">Carregando…</div>
+<button class="close-btn" id="closeBtn" style="display:none;">✕</button>
+
+<script>
+  // Só trocar esses dois valores por live/uso.
+  var LIVE_ID = "b2193516-5147-45ea-8e44-d221f947b77f";
+  var HOME_URL = "https://www.feiraodetoalhas.com.br/";
+
+  var SUPABASE_URL = "https://dfntnmquqrtdladqtzrb.supabase.co";
+  var SUPABASE_ANON_KEY = "sb_publishable_TrM6xO7E72zznJKd19GjBw_UsduPjrM";
+  var PLAYER_BASE_URL = "https://livoo-live-shop-web-g51v.vercel.app/player/";
+  var INTERVALO_MS = 20000;
+
+  var avisoEl = document.getElementById("aviso");
+  var closeBtn = document.getElementById("closeBtn");
+  var iframeMostrado = false;
+
+  function sairPraLoja() {
+    window.location.href = HOME_URL;
+  }
+
+  function mostrarIframe() {
+    if (iframeMostrado) return;
+    iframeMostrado = true;
+    avisoEl.remove();
+    closeBtn.style.display = "block";
+
+    var iframe = document.createElement("iframe");
+    iframe.src = PLAYER_BASE_URL + LIVE_ID;
+    iframe.setAttribute("allow", "autoplay");
+    document.body.appendChild(iframe);
+  }
+
+  function checarStatus() {
+    fetch(SUPABASE_URL + "/rest/v1/lives?id=eq." + LIVE_ID + "&select=status", {
+      headers: { apikey: SUPABASE_ANON_KEY },
+    })
+      .then(function (r) { return r.json(); })
+      .then(function (linhas) {
+        var status = linhas[0] && linhas[0].status;
+        if (status === "ao_vivo") {
+          mostrarIframe();
+        } else if (iframeMostrado) {
+          // a pessoa já estava assistindo e a live encerrou agora — volta pra loja.
+          sairPraLoja();
+        } else {
+          // nunca chegou a começar ainda (ou já encerrou antes de abrir) — não deixa entrar.
+          sairPraLoja();
+        }
+      })
+      .catch(function () {
+        // se a checagem falhar e a live já estava sendo exibida, não derruba por causa
+        // de uma falha de rede passageira; só não deixa entrar se ainda não tinha entrado.
+        if (!iframeMostrado) sairPraLoja();
+      });
+  }
+
+  checarStatus();
+  setInterval(checarStatus, INTERVALO_MS);
+
+  closeBtn.addEventListener('click', sairPraLoja);
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape') sairPraLoja();
+  });
+</script>
+
+</body>
+</html>

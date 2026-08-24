@@ -108,6 +108,9 @@ export async function criarCupomDesconto(input: {
     codigo: input.codigo,
     descricao: input.descricao,
     tipoDesconto: tipoDescontoMagazord(input.tipoDesconto),
+    // tipoLimite 1 = cupom de uso geral (não amarrado a uma pessoa específica),
+    // igual os cupons de campanha (ex: "FEIRAO10") que já existem na conta.
+    tipoLimite: 1,
     valorDesconto: input.valorDesconto,
     validoDe: input.validoDe,
     validoAte: input.validoAte,

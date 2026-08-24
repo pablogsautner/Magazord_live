@@ -1,0 +1,51 @@
+<!--
+  Widget de live shopping — cole esse bloco no site do e-commerce, no lugar
+  onde a live deve aparecer. Ele mesmo decide se mostra ou esconde o player,
+  checando o status da live a cada 20s (sem precisar reload da página).
+
+  Só precisa trocar o LIVE_ID abaixo pelo ID de cada live.
+-->
+<div id="live-shopping-widget" style="display:none; width:380px; max-width:100%; aspect-ratio:9/16;"></div>
+
+<script>
+(function () {
+  var LIVE_ID = "COLOQUE_O_ID_DA_LIVE_AQUI";
+  var SUPABASE_URL = "https://dfntnmquqrtdladqtzrb.supabase.co";
+  var SUPABASE_ANON_KEY = "sb_publishable_TrM6xO7E72zznJKd19GjBw_UsduPjrM";
+  var PLAYER_BASE_URL = "https://livoo-live-shop-web-g51v.vercel.app/player/";
+  var INTERVALO_MS = 20000;
+
+  var container = document.getElementById("live-shopping-widget");
+
+  function mostrarPlayer() {
+    if (container.querySelector("iframe")) return;
+    var iframe = document.createElement("iframe");
+    iframe.src = PLAYER_BASE_URL + LIVE_ID;
+    iframe.style.cssText = "width:100%;height:100%;border:none;";
+    iframe.setAttribute("allow", "autoplay");
+    container.appendChild(iframe);
+    container.style.display = "block";
+  }
+
+  function esconderPlayer() {
+    container.innerHTML = "";
+    container.style.display = "none";
+  }
+
+  function checarStatus() {
+    fetch(SUPABASE_URL + "/rest/v1/lives?id=eq." + LIVE_ID + "&select=status", {
+      headers: { apikey: SUPABASE_ANON_KEY },
+    })
+      .then(function (r) { return r.json(); })
+      .then(function (linhas) {
+        var status = linhas[0] && linhas[0].status;
+        if (status === "ao_vivo") mostrarPlayer();
+        else esconderPlayer();
+      })
+      .catch(function () { /* mantém o estado atual se a checagem falhar */ });
+  }
+
+  checarStatus();
+  setInterval(checarStatus, INTERVALO_MS);
+})();
+</script>
