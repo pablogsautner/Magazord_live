@@ -95,6 +95,13 @@ function tipoDescontoMagazord(tipoDesconto) {
   return tipoDesconto === 'percentual' ? 2 : 1;
 }
 
+// A Magazord dá 500 (não um 400 de validação) se a data ISO tiver milissegundos
+// — e `Date.toISOString()` do JS sempre inclui ("...T00:00:00.000Z"). Normaliza
+// removendo, senão qualquer front que use Date nativo pra montar a data quebra.
+function isoSemMilissegundos(data) {
+  return new Date(data).toISOString().replace(/\.\d{3}Z$/, 'Z');
+}
+
 export async function criarCupomDesconto({ codigo, descricao, tipoDesconto, valorDesconto, validoDe, validoAte, valorMinimoPedido }) {
   const resposta = await magazordEnviar('POST', '/v2/site/cupomDesconto', {
     codigo,
@@ -104,15 +111,17 @@ export async function criarCupomDesconto({ codigo, descricao, tipoDesconto, valo
     // igual os cupons de campanha (ex: "FEIRAO10") que já existem na conta.
     tipoLimite: 1,
     valorDesconto,
-    validoDe,
-    validoAte,
-    valorMinimoPedido,
+    validoDe: isoSemMilissegundos(validoDe),
+    validoAte: isoSemMilissegundos(validoAte),
+    // A Magazord exige um número aqui, não aceita null — "sem mínimo" = 0.
+    valorMinimoPedido: valorMinimoPedido ?? 0,
     loja: Number(config.magazord.lojaId),
   });
   return resposta?.data ?? resposta;
 }
 
 export async function atualizarCupomDesconto(magazordCupomId, campos) {
+  if (campos.validoAte) campos = { ...campos, validoAte: isoSemMilissegundos(campos.validoAte) };
   const resposta = await magazordEnviar('PATCH', `/v2/site/cupomDesconto/${magazordCupomId}`, campos);
   return resposta?.data ?? resposta;
 }
