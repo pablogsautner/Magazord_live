@@ -63,9 +63,26 @@ empresasRouter.post('/', async (req, res) => {
     .single();
   if (error) return res.status(500).json({ error: 'insert_failed', message: error.message });
 
-  // Cria a config padrão junto — sem isso a tela de configurações da empresa
-  // não teria nenhuma linha pra ler/editar até alguém salvar algo primeiro.
+  // Cria a config e os 2 temas (claro/escuro) padrão junto — sem isso a tela
+  // de configurações da empresa não teria nenhuma linha pra ler/editar até
+  // alguém salvar algo primeiro.
   await supabase.from('empresa_configuracoes').insert({ empresa_id: data.id, nome_loja: nome });
+  await supabase.from('empresa_temas').insert([
+    { empresa_id: data.id, modo: 'claro' },
+    {
+      empresa_id: data.id,
+      modo: 'escuro',
+      primary_color: '#f5f5f5',
+      primary_foreground: '#171717',
+      primary_hover: '#e5e5e5',
+      page_background: '#0a0a0a',
+      card_background: '#171717',
+      card_border: '#262626',
+      heading_color: '#fafafa',
+      subheading_color: '#a3a3a3',
+      body_text_color: '#d4d4d4',
+    },
+  ]);
 
   res.status(201).json(data);
 });

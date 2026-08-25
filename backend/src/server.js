@@ -12,6 +12,7 @@ import { usuariosRouter } from './routes/usuarios.js';
 import { membrosRouter } from './routes/membros.js';
 import { configuracoesRouter } from './routes/configuracoes.js';
 import { empresaConfiguracoesRouter } from './routes/empresaConfiguracoes.js';
+import { empresaTemasRouter } from './routes/empresaTemas.js';
 
 const app = express();
 app.use(cors());
@@ -28,6 +29,7 @@ app.use('/lives', livesRouter);
 app.use('/live-products', liveProductsRouter);
 app.use('/cupons', cuponsRouter);
 app.use('/empresa-configuracoes', empresaConfiguracoesRouter);
+app.use('/empresa-temas', empresaTemasRouter);
 
 // Painel interno (nosso, não do cliente) — exige usuário autenticado presente em SUPER_ADMIN_EMAILS.
 app.use('/empresas', limiteInterno, empresasRouter);

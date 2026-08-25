@@ -10,6 +10,8 @@
   4. `004_cupons.sql` — tabela `cupons` (vinculada a uma live).
   5. `005_configuracoes.sql` — configurações globais da plataforma (chave/valor).
   6. `006_empresa_configuracoes.sql` — configurações por empresa (nome da loja, tema, cores).
+  7. `007_tema_empresa.sql` — expande as cores do tema pra um conjunto mais completo (botão, superfícies, tipografia, badges).
+  8. `008_empresa_temas.sql` — separa as cores em 2 conjuntos por empresa (modo claro e modo escuro), numa tabela `empresa_temas` própria.
 
 ## Como a autenticação funciona (importante ler antes de mexer)
 
@@ -128,17 +130,20 @@ Cria o cupom de verdade na Magazord (funciona no checkout real da loja) e guarda
 ### Audiência ao vivo (YouTube)
 - **`GET /lives/:id/audiencia`** — quantas pessoas estão assistindo agora. Resposta: `{ ao_vivo: boolean, espectadores: number | null }` (`espectadores` só vem preenchido quando `ao_vivo` é `true` e o YouTube já informou o número). Usa a `youtube_api_key` cadastrada em `/configuracoes` — sem OAuth, sem login do Google, só leitura pública.
 
-### Configurações da empresa (nome da loja, tema, cores)
+### Configurações da empresa (nome da loja, idioma, modo de tema)
 Diferente de `/configuracoes` (que é global da plataforma) — isso é por empresa. Leitura é direta no Supabase (`empresa_configuracoes`, RLS pública, pra o player poder aplicar a marca também); essa rota é só pra escrita. Uma linha é criada automaticamente com valores padrão quando a empresa é criada.
-- **`PATCH /empresa-configuracoes/:empresaId`** — atualiza qualquer um de:
-  - Geral: `nome_loja`, `email_contato`, `fuso_horario`, `idioma`, `logo_url`, `modo_tema` (`claro`/`escuro`/`sistema`)
+- **`PATCH /empresa-configuracoes/:empresaId`** — atualiza qualquer um de: `nome_loja`, `email_contato`, `fuso_horario`, `idioma`, `logo_url`, `modo_tema` (`claro`/`escuro`/`sistema` — controla qual dos 2 conjuntos de cores abaixo o player usa; `sistema` deixa o player escolher sozinho com base no SO de quem está assistindo).
+
+### Temas da empresa (cores — 1 conjunto claro + 1 conjunto escuro)
+Guardado numa tabela própria (`empresa_temas`), separada de `empresa_configuracoes`, porque agora existem **2 conjuntos completos de cores por empresa** — um pro modo claro e um pro modo escuro — em vez de 1 só. Leitura é direta no Supabase (RLS pública) — o player lê as 2 linhas e aplica a certa. Duas linhas (`modo: 'claro'` e `modo: 'escuro'`) são criadas automaticamente com valores padrão quando a empresa é criada (o modo escuro já nasce com uma paleta escura de verdade, não é uma cópia do claro).
+- **`PATCH /empresa-temas/:empresaId/:modo`** — `:modo` é `claro` ou `escuro`. Atualiza qualquer um de:
   - Geometria: `border_radius` (`none`/`sm`/`md`/`lg`/`xl`)
   - Botão principal: `primary_color`, `primary_foreground`, `primary_hover`
   - Superfícies: `page_background`, `card_background`, `card_border`
   - Tipografia: `heading_color`, `subheading_color`, `body_text_color`
   - Badges (ex: "AO VIVO", "30% OFF"): `badge_background`, `badge_text`
 
-  Todas as cores são strings livres (hex, ex: `"#dc2626"`) — sem validação de formato, só de presença.
+  Todas as cores são strings livres (hex, ex: `"#dc2626"`) — sem validação de formato, só de presença. Os dois modos são independentes: mudar o `claro` não afeta o `escuro` e vice-versa.
 
 ### Painel interno (só `SUPER_ADMIN_EMAILS`)
 - **`GET /empresas`**, **`GET /empresas/:id`**, **`POST /empresas`**, **`PATCH /empresas/:id`**, **`DELETE /empresas/:id`** — `magazord_password` nunca volta nas respostas (write-only, fica criptografado no banco).
