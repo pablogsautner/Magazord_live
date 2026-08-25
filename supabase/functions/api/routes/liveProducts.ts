@@ -53,6 +53,26 @@ liveProductsRouter.patch('/:id', async (c) => {
   }
 
   const supabase = getSupabase();
+
+  // Só pode ter 1 produto em destaque por live (o player mostra só 1 no slot de spotlight
+  // e esconde da lista de pills qualquer produto com destaque=true, então 2 ativos ao
+  // mesmo tempo faz o segundo sumir da tela pro espectador).
+  if (campos.destaque === true) {
+    const { data: alvo, error: erroAlvo } = await supabase
+      .from('live_products')
+      .select('live_id')
+      .eq('id', id)
+      .single();
+    if (erroAlvo) return c.json({ error: 'produto_nao_encontrado', message: erroAlvo.message }, 404);
+
+    const { error: erroLimpar } = await supabase
+      .from('live_products')
+      .update({ destaque: false })
+      .eq('live_id', (alvo as any).live_id)
+      .neq('id', id);
+    if (erroLimpar) return c.json({ error: 'update_failed', message: erroLimpar.message }, 500);
+  }
+
   const { data, error } = await supabase.from('live_products').update(campos).eq('id', id).select().single();
   if (error) return c.json({ error: 'update_failed', message: error.message }, 500);
   return c.json(data);

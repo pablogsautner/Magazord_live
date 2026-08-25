@@ -111,7 +111,7 @@ Todas as rotas abaixo (exceto onde marcado) exigem `Authorization: Bearer <token
 
 ### Produtos de uma live
 - **`POST /live-products`** — adiciona um produto à live. Body: o retorno de `GET /produtos/:codigo` + `live_id`.
-- **`PATCH /live-products/:id`** — atualiza `ativo` e/ou `destaque` (booleanos). Existe porque a escrita direta do front no Supabase foi desligada (RLS) — os toggles de "Ativo"/"Destaque" da UI precisam passar por aqui.
+- **`PATCH /live-products/:id`** — atualiza `ativo` e/ou `destaque` (booleanos). Existe porque a escrita direta do front no Supabase foi desligada (RLS) — os toggles de "Ativo"/"Destaque" da UI precisam passar por aqui. Ao marcar `destaque: true`, desmarca automaticamente o destaque de qualquer outro produto da mesma live (só pode ter 1 por vez — o player só tem 1 slot de spotlight e esconde da lista normal qualquer produto com `destaque: true`, então 2 marcados faz o segundo sumir da tela).
 - **`DELETE /live-products/:id`** — remove um produto da live.
 - **`POST /live-products/:id/mover`** — troca a posição (`ordem`) com o vizinho. Body: `{ "direcao": 1 }` (desce) ou `{ "direcao": -1 }` (sobe).
 
