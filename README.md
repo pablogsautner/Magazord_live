@@ -129,7 +129,15 @@ Cria o cupom de verdade na Magazord (funciona no checkout real da loja) e guarda
 
 ### Configurações da empresa (nome da loja, tema, cores)
 Diferente de `/configuracoes` (que é global da plataforma) — isso é por empresa. Leitura é direta no Supabase (`empresa_configuracoes`, RLS pública, pra o player poder aplicar a marca também); essa rota é só pra escrita. Uma linha é criada automaticamente com valores padrão quando a empresa é criada.
-- **`PATCH /empresa-configuracoes/:empresaId`** — atualiza qualquer um de: `nome_loja`, `email_contato`, `fuso_horario`, `idioma`, `cor_primaria`, `cor_destaque`, `raio_borda` (`none`/`sm`/`md`/`lg`/`xl`), `logo_url`, `modo_tema` (`claro`/`escuro`/`sistema`).
+- **`PATCH /empresa-configuracoes/:empresaId`** — atualiza qualquer um de:
+  - Geral: `nome_loja`, `email_contato`, `fuso_horario`, `idioma`, `logo_url`, `modo_tema` (`claro`/`escuro`/`sistema`)
+  - Geometria: `border_radius` (`none`/`sm`/`md`/`lg`/`xl`)
+  - Botão principal: `primary_color`, `primary_foreground`, `primary_hover`
+  - Superfícies: `page_background`, `card_background`, `card_border`
+  - Tipografia: `heading_color`, `subheading_color`, `body_text_color`
+  - Badges (ex: "AO VIVO", "30% OFF"): `badge_background`, `badge_text`
+
+  Todas as cores são strings livres (hex, ex: `"#dc2626"`) — sem validação de formato, só de presença.
 
 ### Painel interno (só `SUPER_ADMIN_EMAILS`)
 - **`GET /empresas`**, **`POST /empresas`**, **`PATCH /empresas/:id`**, **`DELETE /empresas/:id`** — `magazord_password` nunca volta nas respostas (write-only, fica criptografado no banco).

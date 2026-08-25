@@ -1,0 +1,83 @@
+<!--
+  Tarja "AO VIVO" — cole logo depois da tag <body> do site. Fica escondida e
+  só aparece quando a live estiver com status "ao_vivo" de verdade; em
+  qualquer outro status (agendada, encerrada) ela some sozinha.
+-->
+<a id="tarja-ao-vivo" href="#" target="_top">
+  🔴 AO VIVO — clique para assistir agora
+</a>
+
+<style>
+  #tarja-ao-vivo {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 99999;
+    background: #dc2626;
+    color: #fff;
+    text-align: center;
+    font-family: sans-serif;
+    font-weight: bold;
+    text-decoration: none;
+    box-sizing: border-box;
+    min-height: 48px;
+    line-height: 48px;
+    font-size: 16px;
+  }
+
+  @media (max-width: 1400px) {
+    #tarja-ao-vivo {
+      min-height: 44px;
+      line-height: 44px;
+      font-size: 15px;
+    }
+  }
+
+  @media (max-width: 968px) {
+    #tarja-ao-vivo {
+      min-height: 40px;
+      line-height: 40px;
+      font-size: 13px;
+    }
+  }
+
+  @media (max-width: 768px) {
+    #tarja-ao-vivo {
+      min-height: 36px;
+      line-height: 36px;
+      font-size: 12px;
+      padding: 0 8px;
+    }
+  }
+</style>
+
+<script>
+(function () {
+  var LIVE_ID = "3e413974-710b-4594-ab4a-f3093fa818ba";
+  var LIVE_PAGE_URL = "https://www.feiraodetoalhas.com.br/live-teste";
+
+  var SUPABASE_URL = "https://dfntnmquqrtdladqtzrb.supabase.co";
+  var SUPABASE_ANON_KEY = "sb_publishable_TrM6xO7E72zznJKd19GjBw_UsduPjrM";
+  var INTERVALO_MS = 20000;
+
+  var tarja = document.getElementById("tarja-ao-vivo");
+  tarja.href = LIVE_PAGE_URL;
+
+  function checarStatus() {
+    fetch(SUPABASE_URL + "/rest/v1/lives?id=eq." + LIVE_ID + "&select=status", {
+      headers: { apikey: SUPABASE_ANON_KEY },
+    })
+      .then(function (r) { return r.json(); })
+      .then(function (linhas) {
+        var status = linhas[0] && linhas[0].status;
+        tarja.style.display = status === "ao_vivo" ? "block" : "none";
+      })
+      .catch(function () { /* mantém o estado atual se a checagem falhar */ });
+  }
+
+  checarStatus();
+  setInterval(checarStatus, INTERVALO_MS);
+})();
+</script>

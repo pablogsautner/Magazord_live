@@ -11,11 +11,25 @@ const CAMPOS_VALIDOS = [
   'email_contato',
   'fuso_horario',
   'idioma',
-  'cor_primaria',
-  'cor_destaque',
-  'raio_borda',
   'logo_url',
   'modo_tema',
+  // Geometria
+  'border_radius',
+  // Cor da marca e botões
+  'primary_color',
+  'primary_foreground',
+  'primary_hover',
+  // Superfícies e bordas
+  'page_background',
+  'card_background',
+  'card_border',
+  // Tipografia e textos
+  'heading_color',
+  'subheading_color',
+  'body_text_color',
+  // Destaques e badges
+  'badge_background',
+  'badge_text',
 ];
 const RAIOS_VALIDOS = ['none', 'sm', 'md', 'lg', 'xl'];
 const MODOS_VALIDOS = ['claro', 'escuro', 'sistema'];
@@ -33,8 +47,8 @@ empresaConfiguracoesRouter.patch('/:empresaId', async (c) => {
   for (const chave of CAMPOS_VALIDOS) {
     if (body[chave] !== undefined) campos[chave] = body[chave];
   }
-  if (campos.raio_borda !== undefined && !RAIOS_VALIDOS.includes(campos.raio_borda as string)) {
-    return c.json({ error: 'raio_borda_invalido', message: `deve ser um de: ${RAIOS_VALIDOS.join(', ')}` }, 400);
+  if (campos.border_radius !== undefined && !RAIOS_VALIDOS.includes(campos.border_radius as string)) {
+    return c.json({ error: 'border_radius_invalido', message: `deve ser um de: ${RAIOS_VALIDOS.join(', ')}` }, 400);
   }
   if (campos.modo_tema !== undefined && !MODOS_VALIDOS.includes(campos.modo_tema as string)) {
     return c.json({ error: 'modo_tema_invalido', message: `deve ser um de: ${MODOS_VALIDOS.join(', ')}` }, 400);
