@@ -98,7 +98,7 @@ Depois disso, criar uma live pelo painel (`POST /lives`) resolve a empresa sozin
 Todas as rotas abaixo (exceto onde marcado) exigem `Authorization: Bearer <token>`. Sem token válido: `401`. Sem vínculo com a empresa do recurso: `403`.
 
 ### Produtos (proxy da Magazord)
-- **`GET /produtos/buscar?nome=<texto>`** — autocomplete por nome (mín. 3 caracteres), até 15 resultados: `[{ codigo, nome }]`.
+- **`GET /produtos/buscar?nome=<texto>`** — autocomplete por nome (mín. 3 caracteres), até 15 resultados: `[{ codigo, nome }]`. Um resultado por produto **pai** (não por variação/cor) — a Magazord retorna cada cor como uma "derivação" separada, então sem essa deduplicação uma única toalha com 20 cores lotaria a lista inteira e esconderia os outros produtos. O `codigo` devolvido é o de uma derivação ativa qualquer (usado só pra puxar preço/estoque/link em `GET /produtos/:codigo`).
 - **`GET /produtos/:codigo`** — detalhe + preço + estoque + link da loja num JSON só: `{ produto_codigo, nome, imagem_url, preco, preco_antigo, estoque, url_produto }`.
 
 ### Sincronização
@@ -111,6 +111,7 @@ Todas as rotas abaixo (exceto onde marcado) exigem `Authorization: Bearer <token
 
 ### Produtos de uma live
 - **`POST /live-products`** — adiciona um produto à live. Body: o retorno de `GET /produtos/:codigo` + `live_id`.
+- **`PATCH /live-products/:id`** — atualiza `ativo` e/ou `destaque` (booleanos). Existe porque a escrita direta do front no Supabase foi desligada (RLS) — os toggles de "Ativo"/"Destaque" da UI precisam passar por aqui.
 - **`DELETE /live-products/:id`** — remove um produto da live.
 - **`POST /live-products/:id/mover`** — troca a posição (`ordem`) com o vizinho. Body: `{ "direcao": 1 }` (desce) ou `{ "direcao": -1 }` (sobe).
 
@@ -140,7 +141,7 @@ Diferente de `/configuracoes` (que é global da plataforma) — isso é por empr
   Todas as cores são strings livres (hex, ex: `"#dc2626"`) — sem validação de formato, só de presença.
 
 ### Painel interno (só `SUPER_ADMIN_EMAILS`)
-- **`GET /empresas`**, **`POST /empresas`**, **`PATCH /empresas/:id`**, **`DELETE /empresas/:id`** — `magazord_password` nunca volta nas respostas (write-only, fica criptografado no banco).
+- **`GET /empresas`**, **`GET /empresas/:id`**, **`POST /empresas`**, **`PATCH /empresas/:id`**, **`DELETE /empresas/:id`** — `magazord_password` nunca volta nas respostas (write-only, fica criptografado no banco).
 - **`GET /usuarios`**, **`POST /usuarios`** (`{ email, password }`), **`DELETE /usuarios/:id`** — gerencia usuários do Supabase Auth.
 - **`GET /membros?empresa_id=<id>`**, **`POST /membros`** (`{ user_id, empresa_id, papel }`), **`DELETE /membros/:id`** — liga/desliga usuário de empresa.
 - **`GET /configuracoes`**, **`PUT /configuracoes/:chave`** (`{ valor, criptografado }`) — configurações globais da plataforma (ex: `youtube_api_key`). Valores criptografados nunca voltam na resposta.
