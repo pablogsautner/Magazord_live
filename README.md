@@ -12,6 +12,7 @@
   6. `006_empresa_configuracoes.sql` — configurações por empresa (nome da loja, tema, cores).
   7. `007_tema_empresa.sql` — expande as cores do tema pra um conjunto mais completo (botão, superfícies, tipografia, badges).
   8. `008_empresa_temas.sql` — separa as cores em 2 conjuntos por empresa (modo claro e modo escuro), numa tabela `empresa_temas` própria.
+  9. `009_comentarios.sql` — chat da live: tabela `comentarios`, leitura pública + Realtime habilitado.
 
 ## Como a autenticação funciona (importante ler antes de mexer)
 
@@ -126,6 +127,11 @@ Cria o cupom de verdade na Magazord (funciona no checkout real da loja) e guarda
 **Testado criando um cupom real** (com validade já expirada de propósito, pra não ficar utilizável): confirmado que `POST /cupons` cria de verdade na Magazord e devolve o `magazord_cupom_id`. No caminho, achamos que a Magazord exige um campo `tipoLimite` na criação que a doc não menciona — fixamos como `1` (uso geral, não amarrado a uma pessoa/CPF, igual os cupons de campanha tipo "FEIRAO10" que já existem na conta).
 
 **Limitação conhecida**: `PATCH /cupons/:id` (usado por `PATCH` e `DELETE` pra ativar/desativar) está retornando `500 Internal Server Error` **do lado da Magazord** pro cupom de teste que criamos — tentamos com campos parciais, completos, tipos string e number, sempre o mesmo erro. Não parece ser problema do nosso payload. Ainda não confirmamos se é específico desse cupom ou de todos — vale investigar com o suporte da Magazord antes de depender dessa rota em produção. O "limite de N usos" continua sem confirmação — não veio nenhum campo de contagem na resposta do cupom criado, só o `tipoLimite` (que parece ser sobre *quem* pode usar, não quantas vezes).
+
+### Chat da live (comentários)
+Diferente de todo o resto da API — essa é a **primeira rota pública sem autenticação** do sistema, porque quem comenta é o espectador anônimo assistindo pelo player, não um usuário logado da plataforma. Por isso a escrita não é liberada direto no Supabase (evitaria virar porta aberta pra spam/flood): passa por uma rota pública do backend, com validação de tamanho e sob o rate limiting geral.
+- **`POST /comentarios`** — **sem token**. Body: `{ live_id, nome, texto }` (`nome`: 1–60 caracteres; `texto`: 1–500 caracteres). `404` se a live não existir.
+- Leitura é direta no Supabase (`comentarios`, RLS pública) — o player deve usar **Realtime** (`postgres_changes` filtrando por `live_id`) pra mostrar o chat entrando na hora, sem precisar de polling.
 
 ### Audiência ao vivo (YouTube)
 - **`GET /lives/:id/audiencia`** — quantas pessoas estão assistindo agora. Resposta: `{ ao_vivo: boolean, espectadores: number | null }` (`espectadores` só vem preenchido quando `ao_vivo` é `true` e o YouTube já informou o número). Usa a `youtube_api_key` cadastrada em `/configuracoes` — sem OAuth, sem login do Google, só leitura pública.

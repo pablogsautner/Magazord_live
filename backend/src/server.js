@@ -13,6 +13,7 @@ import { membrosRouter } from './routes/membros.js';
 import { configuracoesRouter } from './routes/configuracoes.js';
 import { empresaConfiguracoesRouter } from './routes/empresaConfiguracoes.js';
 import { empresaTemasRouter } from './routes/empresaTemas.js';
+import { comentariosRouter } from './routes/comentarios.js';
 
 const app = express();
 app.use(cors());
@@ -30,6 +31,9 @@ app.use('/live-products', liveProductsRouter);
 app.use('/cupons', cuponsRouter);
 app.use('/empresa-configuracoes', empresaConfiguracoesRouter);
 app.use('/empresa-temas', empresaTemasRouter);
+
+// Pública de propósito (chat da live) — fica sob o limiteGeral, não requireUser.
+app.use('/comentarios', comentariosRouter);
 
 // Painel interno (nosso, não do cliente) — exige usuário autenticado presente em SUPER_ADMIN_EMAILS.
 app.use('/empresas', limiteInterno, empresasRouter);
