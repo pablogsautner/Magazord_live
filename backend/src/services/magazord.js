@@ -60,11 +60,12 @@ export async function buscarProdutosPorNome(nome, limite = 15) {
   const opcoes = [];
   for (const produto of data.items) {
     if (!produto.ativo) continue;
-    for (const derivacao of produto.derivacoes ?? []) {
-      if (!derivacao.ativo) continue;
-      opcoes.push({ codigo: derivacao.codigo, nome: derivacao.nome });
-      if (opcoes.length >= limite) return opcoes;
-    }
+    const derivacaoAtiva = (produto.derivacoes ?? []).find(
+      (derivacao) => derivacao.ativo && !derivacao.nome.toUpperCase().includes('FORA DE COLEÇÃO')
+    );
+    if (!derivacaoAtiva) continue;
+    opcoes.push({ codigo: derivacaoAtiva.codigo, nome: produto.nome });
+    if (opcoes.length >= limite) return opcoes;
   }
   return opcoes;
 }
