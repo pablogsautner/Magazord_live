@@ -107,8 +107,8 @@ Todas as rotas abaixo (exceto onde marcado) exigem `Authorization: Bearer <token
 - **`POST /sync/live/:liveId`** — revalida preço/estoque dos produtos ativos da live direto na Magazord. Resposta: `{ sincronizados, falhas }`.
 
 ### Lives
-- **`POST /lives`** — cria uma live. Body: `{ titulo, youtube_video_id }`. A empresa é resolvida automaticamente pelo vínculo do usuário.
-- **`PATCH /lives/:id`** — edita `titulo` e/ou `youtube_video_id` (manda só o que for mudar).
+- **`POST /lives`** — cria uma live. Body: `{ titulo, youtube_video_id }`. A empresa é resolvida automaticamente pelo vínculo do usuário. `status` começa em `agendada` por padrão (coluna `status` em `lives`, default no banco).
+- **`PATCH /lives/:id`** — edita `titulo`, `youtube_video_id` e/ou `status` (manda só o que for mudar). `status` deve ser um de `agendada`/`ao_vivo`/`encerrada` — é o campo que os widgets públicos (tarja, player fullscreen) ficam sondando pra decidir se mostram ou escondem a live.
 - **`DELETE /lives/:id`** — apaga a live e (por `ON DELETE CASCADE`) todos os produtos dela.
 
 ### Produtos de uma live
