@@ -14,6 +14,7 @@ import { configuracoesRouter } from './routes/configuracoes.js';
 import { empresaConfiguracoesRouter } from './routes/empresaConfiguracoes.js';
 import { empresaTemasRouter } from './routes/empresaTemas.js';
 import { comentariosRouter } from './routes/comentarios.js';
+import { roletaRouter } from './routes/roleta.js';
 
 const app = express();
 app.use(cors());
@@ -34,6 +35,8 @@ app.use('/empresa-temas', empresaTemasRouter);
 
 // Pública de propósito (chat da live) — fica sob o limiteGeral, não requireUser.
 app.use('/comentarios', comentariosRouter);
+// GET e POST /girar são públicos; PATCH exige login (aplicado dentro da própria rota).
+app.use('/roleta', roletaRouter);
 
 // Painel interno (nosso, não do cliente) — exige usuário autenticado presente em SUPER_ADMIN_EMAILS.
 app.use('/empresas', limiteInterno, empresasRouter);

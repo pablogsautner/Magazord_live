@@ -12,6 +12,7 @@ import { configuracoesRouter } from './routes/configuracoes.ts';
 import { empresaConfiguracoesRouter } from './routes/empresaConfiguracoes.ts';
 import { empresaTemasRouter } from './routes/empresaTemas.ts';
 import { comentariosRouter } from './routes/comentarios.ts';
+import { roletaRouter } from './routes/roleta.ts';
 
 // basePath('/api') porque a função se chama "api" — o Supabase invoca em
 // .../functions/v1/api/..., e o Hono precisa saber esse prefixo pra rotear certo.
@@ -28,6 +29,7 @@ app.route('/cupons', cuponsRouter);
 app.route('/empresa-configuracoes', empresaConfiguracoesRouter);
 app.route('/empresa-temas', empresaTemasRouter);
 app.route('/comentarios', comentariosRouter);
+app.route('/roleta', roletaRouter);
 
 // Painel interno (nosso, não do cliente) — exige usuário autenticado presente em SUPER_ADMIN_EMAILS.
 app.route('/empresas', empresasRouter);

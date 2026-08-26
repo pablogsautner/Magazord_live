@@ -13,6 +13,7 @@
   7. `007_tema_empresa.sql` — expande as cores do tema pra um conjunto mais completo (botão, superfícies, tipografia, badges).
   8. `008_empresa_temas.sql` — separa as cores em 2 conjuntos por empresa (modo claro e modo escuro), numa tabela `empresa_temas` própria.
   9. `009_comentarios.sql` — chat da live: tabela `comentarios`, leitura pública + Realtime habilitado.
+  10. `010_roleta.sql` — roleta de cupons: tabelas `roletas`, `roleta_itens` (leitura pública) e `roleta_giros` (controle de 1 giro por sessão/IP, sem leitura pública).
 
 ## Como a autenticação funciona (importante ler antes de mexer)
 
@@ -127,6 +128,12 @@ Cria o cupom de verdade na Magazord (funciona no checkout real da loja) e guarda
 **Testado criando um cupom real** (com validade já expirada de propósito, pra não ficar utilizável): confirmado que `POST /cupons` cria de verdade na Magazord e devolve o `magazord_cupom_id`. No caminho, achamos que a Magazord exige um campo `tipoLimite` na criação que a doc não menciona — fixamos como `1` (uso geral, não amarrado a uma pessoa/CPF, igual os cupons de campanha tipo "FEIRAO10" que já existem na conta).
 
 **Limitação conhecida**: `PATCH /cupons/:id` (usado por `PATCH` e `DELETE` pra ativar/desativar) está retornando `500 Internal Server Error` **do lado da Magazord** pro cupom de teste que criamos — tentamos com campos parciais, completos, tipos string e number, sempre o mesmo erro. Não parece ser problema do nosso payload. Ainda não confirmamos se é específico desse cupom ou de todos — vale investigar com o suporte da Magazord antes de depender dessa rota em produção. O "limite de N usos" continua sem confirmação — não veio nenhum campo de contagem na resposta do cupom criado, só o `tipoLimite` (que parece ser sobre *quem* pode usar, não quantas vezes).
+
+### Roleta de cupons
+Sorteio ponderado por live (cada item tem um `peso`; quanto maior, mais chance). O sorteio roda **no backend**, não no navegador — senão a trava de "1 giro por pessoa" não valeria nada, dava pra forjar o resultado no client. Leitura (`GET`) é pública; escrita de configuração (`PATCH`) exige login e vínculo com a empresa da live, igual o resto.
+- **`GET /roleta/:liveId`** — sem token. Retorna `{ live_id, ativa, atualizado_em, itens: [...] }`. `404` se a live não tiver roleta configurada ainda.
+- **`PATCH /roleta/:liveId`** — atualiza `ativa` e/ou `itens` (manda só o que for mudar). Quando `itens` é enviado, **substitui a lista inteira** (apaga e recria) — não dá pra editar item a item, é tudo de uma vez. Cada item: `{ tipo: "cupom" | "sem_premio", coupon_id, codigo, descricao, tipo_desconto, valor_desconto, peso }`, `peso` precisa ser maior que zero.
+- **`POST /roleta/:liveId/girar`** — sem token. Body: `{ session_id }` (gerado e guardado no `localStorage` de quem assiste, 1 vez por navegador — o front ainda precisa gerar isso). O IP é capturado no próprio backend (`X-Forwarded-For`), não vem do client. Bloqueia um segundo giro pela mesma sessão **ou** pelo mesmo IP (o que vier primeiro trava o outro) — devolve `409 { error: "ja_girou", item }` com o prêmio já sorteado antes, em vez de só um erro seco. Sucesso: `200 { item }`.
 
 ### Chat da live (comentários)
 Diferente de todo o resto da API — essa é a **primeira rota pública sem autenticação** do sistema, porque quem comenta é o espectador anônimo assistindo pelo player, não um usuário logado da plataforma. Por isso a escrita não é liberada direto no Supabase (evitaria virar porta aberta pra spam/flood): passa por uma rota pública do backend, com validação de tamanho e sob o rate limiting geral.
