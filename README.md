@@ -102,7 +102,7 @@ Todas as rotas abaixo (exceto onde marcado) exigem `Authorization: Bearer <token
 
 ### Produtos (proxy da Magazord)
 - **`GET /produtos/buscar?nome=<texto>`** — autocomplete por nome (mín. 3 caracteres), até 15 resultados: `[{ codigo, nome }]`. Um resultado por produto **pai** (não por variação/cor) — a Magazord retorna cada cor como uma "derivação" separada, então sem essa deduplicação uma única toalha com 20 cores lotaria a lista inteira e esconderia os outros produtos. O `codigo` devolvido é o de uma derivação ativa qualquer (usado só pra puxar preço/estoque/link em `GET /produtos/:codigo`).
-- **`GET /produtos/:codigo`** — detalhe + preço + estoque + link da loja num JSON só: `{ produto_codigo, nome, imagem_url, preco, preco_antigo, estoque, url_produto }`.
+- **`GET /produtos/:codigo`** — detalhe + preço + estoque + link da loja num JSON só: `{ produto_codigo, nome, imagem_url, preco, preco_antigo, estoque, url_produto }`. **`estoque` é unificado**: soma o saldo de todas as derivações (cores) ativas do mesmo produto pai, não só da cor recebida em `:codigo` — na Magazord cada cor tem estoque próprio e independente (ex: Branco com 465, Azul com 535), então sem essa soma o número mostrado refletiria só 1 cor entre várias.
 
 ### Sincronização
 - **`POST /sync/live/:liveId`** — revalida preço/estoque dos produtos ativos da live direto na Magazord. Resposta: `{ sincronizados, falhas }`.

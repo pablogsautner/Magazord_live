@@ -40,6 +40,19 @@ async function getEstoque(codigoDerivacao) {
   return data.reduce((total, deposito) => total + (deposito.quantidadeDisponivelVenda || 0), 0);
 }
 
+// Cada cor é uma derivação com estoque próprio (ex: Branco tem 465, Azul tem
+// 535 — não é um estoque único compartilhado pelo produto pai). Pra mostrar
+// "quanto tem desse produto" de forma unificada (sem prender a live numa cor
+// específica), soma o estoque de todas as derivações ativas do mesmo pai.
+async function getEstoqueUnificado(codigoProduto, codigoDerivacaoOriginal) {
+  const { data } = await magazordGet(`/v2/site/produto?codigo=${encodeURIComponent(codigoProduto)}`);
+  const derivacoesAtivas = (data.items[0]?.derivacoes ?? []).filter((derivacao) => derivacao.ativo);
+  if (derivacoesAtivas.length === 0) return getEstoque(codigoDerivacaoOriginal);
+
+  const estoques = await Promise.all(derivacoesAtivas.map((derivacao) => getEstoque(derivacao.codigo)));
+  return estoques.reduce((total, estoque) => total + estoque, 0);
+}
+
 async function getPreco(codigoDerivacao) {
   const { data } = await magazordGet(
     `/v1/listPreco?produto=${encodeURIComponent(codigoDerivacao)}&tabelaPreco=${config.magazord.tabelaPrecoId}`
@@ -71,9 +84,10 @@ export async function buscarProdutosPorNome(nome, limite = 15) {
 }
 
 export async function lookupProduto(codigoDerivacao) {
-  const [detalhe, estoque, precoInfo, link] = await Promise.all([
-    getDetalhe(codigoDerivacao),
-    getEstoque(codigoDerivacao),
+  const detalhe = await getDetalhe(codigoDerivacao);
+
+  const [estoque, precoInfo, link] = await Promise.all([
+    getEstoqueUnificado(detalhe.codigoProduto, codigoDerivacao),
     getPreco(codigoDerivacao),
     getLink(codigoDerivacao),
   ]);
