@@ -1,13 +1,31 @@
 import { Router } from 'express';
 import { getSupabase } from '../services/supabase.js';
 import { requireUser } from '../middleware/requireUser.js';
-import { usuarioPertenceAEmpresa } from '../services/tenancy.js';
+import { empresaUnicaDoUsuario, usuarioPertenceAEmpresa } from '../services/tenancy.js';
 
 export const empresaConfiguracoesRouter = Router();
 empresaConfiguracoesRouter.use(requireUser);
 
 const CAMPOS_VALIDOS = ['nome_loja', 'email_contato', 'fuso_horario', 'idioma', 'logo_url', 'modo_tema'];
 const MODOS_VALIDOS = ['claro', 'escuro', 'sistema'];
+
+// Precisa vir antes de "/:empresaId" — senão "me" seria interpretado como um
+// empresaId. O front não tem como descobrir seu próprio empresa_id sozinho
+// (membros/empresas não têm policy de leitura pro cliente), então resolve
+// aqui do mesmo jeito que POST /lives já faz.
+empresaConfiguracoesRouter.get('/me', async (req, res) => {
+  const empresaId = await empresaUnicaDoUsuario(req.user.id);
+  if (!empresaId) return res.status(404).json({ error: 'empresa_nao_encontrada' });
+
+  const supabase = getSupabase();
+  const { data, error } = await supabase
+    .from('empresa_configuracoes')
+    .select()
+    .eq('empresa_id', empresaId)
+    .single();
+  if (error) return res.status(500).json({ error: 'query_failed', message: error.message });
+  res.json(data);
+});
 
 empresaConfiguracoesRouter.patch('/:empresaId', async (req, res) => {
   if (!(await usuarioPertenceAEmpresa(req.user.id, req.params.empresaId))) {

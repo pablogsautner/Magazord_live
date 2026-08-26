@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { getSupabase } from '../services/supabase.js';
 import { requireUser } from '../middleware/requireUser.js';
-import { usuarioPertenceAEmpresa } from '../services/tenancy.js';
+import { empresaUnicaDoUsuario, usuarioPertenceAEmpresa } from '../services/tenancy.js';
 
 export const empresaTemasRouter = Router();
 empresaTemasRouter.use(requireUser);
@@ -22,6 +22,24 @@ const CAMPOS_VALIDOS = [
 ];
 const RAIOS_VALIDOS = ['none', 'sm', 'md', 'lg', 'xl'];
 const MODOS_VALIDOS = ['claro', 'escuro'];
+
+// O front não tem como descobrir seu próprio empresa_id sozinho (membros/
+// empresas não têm policy de leitura pro cliente), então resolve aqui do
+// mesmo jeito que POST /lives já faz, e devolve os 2 modos de uma vez.
+empresaTemasRouter.get('/me', async (req, res) => {
+  const empresaId = await empresaUnicaDoUsuario(req.user.id);
+  if (!empresaId) return res.status(404).json({ error: 'empresa_nao_encontrada' });
+
+  const supabase = getSupabase();
+  const { data, error } = await supabase.from('empresa_temas').select().eq('empresa_id', empresaId);
+  if (error) return res.status(500).json({ error: 'query_failed', message: error.message });
+
+  const claro = data.find((tema) => tema.modo === 'claro');
+  const escuro = data.find((tema) => tema.modo === 'escuro');
+  if (!claro || !escuro) return res.status(404).json({ error: 'temas_nao_encontrados' });
+
+  res.json({ empresa_id: empresaId, claro, escuro });
+});
 
 empresaTemasRouter.patch('/:empresaId/:modo', async (req, res) => {
   const { empresaId, modo } = req.params;
