@@ -83,7 +83,12 @@ export async function buscarProdutosPorNome(nome, limite = 15) {
   return opcoes;
 }
 
-export async function lookupProduto(codigoDerivacao) {
+// A Magazord só retorna pela API o preço "de cartão" (listPreco) — o desconto
+// de Pix não vem em nenhum endpoint (testamos configuracaoPagamento e
+// forma-recebimento, nenhum tem isso), é config só do checkout/tema da loja.
+// Por isso o % é cadastrado manualmente por empresa e aplicado aqui, pra
+// mostrar na live o preço que a pessoa realmente paga pagando no Pix.
+export async function lookupProduto(codigoDerivacao, descontoPixPercentual = 0) {
   const detalhe = await getDetalhe(codigoDerivacao);
 
   const [estoque, precoInfo, link] = await Promise.all([
@@ -93,12 +98,14 @@ export async function lookupProduto(codigoDerivacao) {
   ]);
 
   const imagemPrincipal = detalhe.imagens?.find((img) => img.principal) ?? detalhe.imagens?.[0];
+  const precoCartao = precoInfo ? Number(precoInfo.precoVenda) : null;
+  const preco = precoCartao !== null ? Number((precoCartao * (1 - descontoPixPercentual / 100)).toFixed(2)) : null;
 
   return {
     produto_codigo: codigoDerivacao,
     nome: detalhe.nomeProduto,
     imagem_url: imagemPrincipal?.url ?? null,
-    preco: precoInfo ? Number(precoInfo.precoVenda) : null,
+    preco,
     preco_antigo: precoInfo?.precoAntigo ? Number(precoInfo.precoAntigo) : null,
     estoque,
     url_produto: link ? `${config.magazord.storefrontBaseUrl}/${link}` : null,

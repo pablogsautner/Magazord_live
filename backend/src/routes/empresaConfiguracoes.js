@@ -6,7 +6,7 @@ import { empresaUnicaDoUsuario, usuarioPertenceAEmpresa } from '../services/tena
 export const empresaConfiguracoesRouter = Router();
 empresaConfiguracoesRouter.use(requireUser);
 
-const CAMPOS_VALIDOS = ['nome_loja', 'email_contato', 'fuso_horario', 'idioma', 'logo_url', 'modo_tema'];
+const CAMPOS_VALIDOS = ['nome_loja', 'email_contato', 'fuso_horario', 'idioma', 'logo_url', 'modo_tema', 'desconto_pix_percentual'];
 const MODOS_VALIDOS = ['claro', 'escuro', 'sistema'];
 
 // Precisa vir antes de "/:empresaId" — senão "me" seria interpretado como um
@@ -38,6 +38,12 @@ empresaConfiguracoesRouter.patch('/:empresaId', async (req, res) => {
   }
   if (campos.modo_tema !== undefined && !MODOS_VALIDOS.includes(campos.modo_tema)) {
     return res.status(400).json({ error: 'modo_tema_invalido', message: `deve ser um de: ${MODOS_VALIDOS.join(', ')}` });
+  }
+  if (
+    campos.desconto_pix_percentual !== undefined &&
+    (typeof campos.desconto_pix_percentual !== 'number' || campos.desconto_pix_percentual < 0 || campos.desconto_pix_percentual > 100)
+  ) {
+    return res.status(400).json({ error: 'desconto_pix_percentual_invalido', message: 'deve ser um número entre 0 e 100' });
   }
   if (Object.keys(campos).length === 0) {
     return res.status(400).json({ error: 'nenhum_campo_valido' });
