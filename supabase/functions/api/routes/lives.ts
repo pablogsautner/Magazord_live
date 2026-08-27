@@ -5,18 +5,12 @@ import { empresaUnicaDoUsuario, empresaIdDaLive, usuarioPertenceAEmpresa } from 
 import { audienciaAoVivo } from '../services/youtube.ts';
 
 export const livesRouter = new Hono();
-livesRouter.use('*', requireUser);
 
+// Pública de propósito — o player (espectador anônimo) também lê isso, além
+// do painel. Precisa vir ANTES do livesRouter.use('*', requireUser) abaixo,
+// senão herdaria a exigência de login como o resto das rotas de /lives.
 livesRouter.get('/:id/audiencia', async (c) => {
   const id = c.req.param('id');
-  const user = c.get('user') as { id: string };
-
-  const empresaId = await empresaIdDaLive(id).catch(() => null);
-  if (!empresaId) return c.json({ error: 'live_nao_encontrada' }, 404);
-  if (!(await usuarioPertenceAEmpresa(user.id, empresaId))) {
-    return c.json({ error: 'forbidden' }, 403);
-  }
-
   const supabase = getSupabase();
   const { data: live, error } = await supabase.from('lives').select('youtube_video_id').eq('id', id).single();
   if (error) return c.json({ error: 'live_nao_encontrada' }, 404);
@@ -28,6 +22,8 @@ livesRouter.get('/:id/audiencia', async (c) => {
     return c.json({ error: 'youtube_audiencia_failed', message: (err as Error).message }, 502);
   }
 });
+
+livesRouter.use('*', requireUser);
 
 livesRouter.post('/', async (c) => {
   const { titulo, youtube_video_id } = await c.req.json();

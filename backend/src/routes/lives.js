@@ -5,15 +5,11 @@ import { empresaUnicaDoUsuario, empresaIdDaLive, usuarioPertenceAEmpresa } from 
 import { audienciaAoVivo } from '../services/youtube.js';
 
 export const livesRouter = Router();
-livesRouter.use(requireUser);
 
+// Pública de propósito — o player (espectador anônimo) também lê isso, além
+// do painel. Precisa vir ANTES do livesRouter.use(requireUser) abaixo, senão
+// herdaria a exigência de login como o resto das rotas de /lives.
 livesRouter.get('/:id/audiencia', async (req, res) => {
-  const empresaId = await empresaIdDaLive(req.params.id).catch(() => null);
-  if (!empresaId) return res.status(404).json({ error: 'live_nao_encontrada' });
-  if (!(await usuarioPertenceAEmpresa(req.user.id, empresaId))) {
-    return res.status(403).json({ error: 'forbidden' });
-  }
-
   const supabase = getSupabase();
   const { data: live, error } = await supabase.from('lives').select('youtube_video_id').eq('id', req.params.id).single();
   if (error) return res.status(404).json({ error: 'live_nao_encontrada' });
@@ -25,6 +21,8 @@ livesRouter.get('/:id/audiencia', async (req, res) => {
     res.status(502).json({ error: 'youtube_audiencia_failed', message: err.message });
   }
 });
+
+livesRouter.use(requireUser);
 
 livesRouter.post('/', async (req, res) => {
   const { titulo, youtube_video_id } = req.body;
