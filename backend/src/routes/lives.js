@@ -3,22 +3,28 @@ import { getSupabase } from '../services/supabase.js';
 import { requireUser } from '../middleware/requireUser.js';
 import { empresaUnicaDoUsuario, empresaIdDaLive, usuarioPertenceAEmpresa } from '../services/tenancy.js';
 import { audienciaAoVivo } from '../services/youtube.js';
+import { audienciaWebrtc } from '../services/streaming.js';
 
 export const livesRouter = Router();
 
 // Pública de propósito — o player (espectador anônimo) também lê isso, além
 // do painel. Precisa vir ANTES do livesRouter.use(requireUser) abaixo, senão
 // herdaria a exigência de login como o resto das rotas de /lives.
+// youtube_video_id preenchido = live antiga (YouTube); vazio = live do
+// servidor de live próprio (WebRTC) — não tem uma live nova nascendo com
+// YouTube mais, então não precisa de uma coluna de "modo" à parte.
 livesRouter.get('/:id/audiencia', async (req, res) => {
   const supabase = getSupabase();
-  const { data: live, error } = await supabase.from('lives').select('youtube_video_id').eq('id', req.params.id).single();
+  const { data: live, error } = await supabase.from('lives').select('id, youtube_video_id').eq('id', req.params.id).single();
   if (error) return res.status(404).json({ error: 'live_nao_encontrada' });
 
   try {
-    const audiencia = await audienciaAoVivo(live.youtube_video_id);
+    const audiencia = live.youtube_video_id
+      ? await audienciaAoVivo(live.youtube_video_id)
+      : await audienciaWebrtc(live.id);
     res.json(audiencia);
   } catch (err) {
-    res.status(502).json({ error: 'youtube_audiencia_failed', message: err.message });
+    res.status(502).json({ error: 'audiencia_failed', message: err.message });
   }
 });
 
@@ -26,7 +32,7 @@ livesRouter.use(requireUser);
 
 livesRouter.post('/', async (req, res) => {
   const { titulo, youtube_video_id } = req.body;
-  if (!titulo || !youtube_video_id) {
+  if (!titulo) {
     return res.status(400).json({ error: 'campos_obrigatorios_faltando' });
   }
 

@@ -25,6 +25,12 @@ export const config = {
     url: process.env.SUPABASE_URL || '',
     serviceRoleKey: process.env.SUPABASE_SERVICE_ROLE_KEY || '',
   },
+  streaming: {
+    signingSecret: process.env.STREAM_SIGNING_SECRET || '',
+    authServiceUrl: process.env.STREAM_AUTH_SERVICE_URL || '',
+    serverPublicUrl: process.env.STREAM_SERVER_PUBLIC_URL || '',
+    rtmpPublicUrl: process.env.STREAM_SERVER_RTMP_URL || '',
+  },
 };
 
 export { required };

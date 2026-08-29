@@ -3,23 +3,29 @@ import { getSupabase } from '../services/supabase.ts';
 import { requireUser } from '../middleware/requireUser.ts';
 import { empresaUnicaDoUsuario, empresaIdDaLive, usuarioPertenceAEmpresa } from '../services/tenancy.ts';
 import { audienciaAoVivo } from '../services/youtube.ts';
+import { audienciaWebrtc } from '../services/streaming.ts';
 
 export const livesRouter = new Hono();
 
 // Pública de propósito — o player (espectador anônimo) também lê isso, além
 // do painel. Precisa vir ANTES do livesRouter.use('*', requireUser) abaixo,
 // senão herdaria a exigência de login como o resto das rotas de /lives.
+// youtube_video_id preenchido = live antiga (YouTube); vazio = live do
+// servidor de live próprio (WebRTC) — não tem uma live nova nascendo com
+// YouTube mais, então não precisa de uma coluna de "modo" à parte.
 livesRouter.get('/:id/audiencia', async (c) => {
   const id = c.req.param('id');
   const supabase = getSupabase();
-  const { data: live, error } = await supabase.from('lives').select('youtube_video_id').eq('id', id).single();
+  const { data: live, error } = await supabase.from('lives').select('id, youtube_video_id').eq('id', id).single();
   if (error) return c.json({ error: 'live_nao_encontrada' }, 404);
 
   try {
-    const audiencia = await audienciaAoVivo((live as any).youtube_video_id);
+    const audiencia = (live as any).youtube_video_id
+      ? await audienciaAoVivo((live as any).youtube_video_id)
+      : await audienciaWebrtc((live as any).id);
     return c.json(audiencia);
   } catch (err) {
-    return c.json({ error: 'youtube_audiencia_failed', message: (err as Error).message }, 502);
+    return c.json({ error: 'audiencia_failed', message: (err as Error).message }, 502);
   }
 });
 
@@ -27,7 +33,7 @@ livesRouter.use('*', requireUser);
 
 livesRouter.post('/', async (c) => {
   const { titulo, youtube_video_id } = await c.req.json();
-  if (!titulo || !youtube_video_id) {
+  if (!titulo) {
     return c.json({ error: 'campos_obrigatorios_faltando' }, 400);
   }
 

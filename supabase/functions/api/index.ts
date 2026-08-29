@@ -13,6 +13,7 @@ import { empresaConfiguracoesRouter } from './routes/empresaConfiguracoes.ts';
 import { empresaTemasRouter } from './routes/empresaTemas.ts';
 import { comentariosRouter } from './routes/comentarios.ts';
 import { roletaRouter } from './routes/roleta.ts';
+import { liveStreamRouter } from './routes/liveStream.ts';
 
 // basePath('/api') porque a função se chama "api" — o Supabase invoca em
 // .../functions/v1/api/..., e o Hono precisa saber esse prefixo pra rotear certo.
@@ -25,6 +26,7 @@ app.route('/produtos', produtosRouter);
 app.route('/sync', syncRouter);
 app.route('/lives', livesRouter);
 app.route('/live-products', liveProductsRouter);
+app.route('/live-stream', liveStreamRouter);
 app.route('/cupons', cuponsRouter);
 app.route('/empresa-configuracoes', empresaConfiguracoesRouter);
 app.route('/empresa-temas', empresaTemasRouter);

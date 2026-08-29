@@ -17,4 +17,10 @@ export const config = {
     url: Deno.env.get('SUPABASE_URL') ?? '',
     serviceRoleKey: Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
   },
+  streaming: {
+    signingSecret: Deno.env.get('STREAM_SIGNING_SECRET') ?? '',
+    authServiceUrl: Deno.env.get('STREAM_AUTH_SERVICE_URL') ?? '',
+    serverPublicUrl: Deno.env.get('STREAM_SERVER_PUBLIC_URL') ?? '',
+    rtmpPublicUrl: Deno.env.get('STREAM_SERVER_RTMP_URL') ?? '',
+  },
 };

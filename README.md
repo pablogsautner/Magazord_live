@@ -15,6 +15,7 @@
   9. `009_comentarios.sql` — chat da live: tabela `comentarios`, leitura pública + Realtime habilitado.
   10. `010_roleta.sql` — roleta de cupons: tabelas `roletas`, `roleta_itens` (leitura pública) e `roleta_giros` (controle de 1 giro por sessão/IP, sem leitura pública).
   11. `011_desconto_pix.sql` — adiciona `desconto_pix_percentual` em `empresa_configuracoes`, usado pra calcular o preço de Pix exibido na live (a Magazord não expõe isso pela API).
+  12. `012_live_stream_webrtc.sql` — `youtube_video_id` vira opcional: lives novas não usam mais YouTube, só o servidor de live próprio (WebRTC).
 
 ## Como a autenticação funciona (importante ler antes de mexer)
 
@@ -54,6 +55,7 @@ Duas categorias de rota, dois níveis de permissão:
    - `MAGAZORD_*` — credenciais da Magazord (usadas hoje pra toda empresa; virar per-empresa é o próximo passo).
    - `ENCRYPTION_KEY` — gere com `openssl rand -hex 32` (ou `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"`). Usada só pra criptografar a senha da Magazord de cada empresa cadastrada em `/empresas`. **Trocar depois de já ter empresa cadastrada invalida os dados salvos.**
    - `SUPER_ADMIN_EMAILS` — seu email (o que você criou no passo 2), separado por vírgula se for mais de um.
+   - `STREAM_*` — só necessário se for usar o servidor de live próprio (WebRTC). `STREAM_SIGNING_SECRET` (gere igual a `ENCRYPTION_KEY`) precisa ser **idêntica** à `HOOKS_SIGNING_SECRET` do serviço de auth na VPS (repo `sereniia-org/test-live-server`) — é o que faz os dois lados confiarem no mesmo token. Sem isso configurado, `POST /live-stream/:liveId/publish-token` falha.
 4. Frontend:
    ```
    cd frontend
@@ -110,9 +112,14 @@ Todas as rotas abaixo (exceto onde marcado) exigem `Authorization: Bearer <token
 - **`POST /sync/live/:liveId`** — revalida preço/estoque dos produtos ativos da live direto na Magazord. Resposta: `{ sincronizados, falhas }`.
 
 ### Lives
-- **`POST /lives`** — cria uma live. Body: `{ titulo, youtube_video_id }`. A empresa é resolvida automaticamente pelo vínculo do usuário. `status` começa em `agendada` por padrão (coluna `status` em `lives`, default no banco).
+- **`POST /lives`** — cria uma live. Body: `{ titulo, youtube_video_id? }` — **`youtube_video_id` é opcional**: não é mais pra ter live nova via YouTube (muita gambiarra pra gerenciar o player — tela de "toque pra entrar" travando autoplay, contador de espectador que o YouTube às vezes simplesmente não retorna). Toda live nova é do servidor de live próprio (WebRTC via SRS, ver seção "Servidor de live" abaixo); `youtube_video_id` só continua existindo pra não quebrar lives antigas já criadas. A empresa é resolvida automaticamente pelo vínculo do usuário. `status` começa em `agendada` por padrão (coluna `status` em `lives`, default no banco).
 - **`PATCH /lives/:id`** — edita `titulo`, `youtube_video_id` e/ou `status` (manda só o que for mudar). `status` deve ser um de `agendada`/`ao_vivo`/`encerrada` — é o campo que os widgets públicos (tarja, player fullscreen) ficam sondando pra decidir se mostram ou escondem a live.
 - **`DELETE /lives/:id`** — apaga a live e (por `ON DELETE CASCADE`) todos os produtos dela.
+- **`GET /lives/:id/audiencia`** — pública, sem token. `{ ao_vivo, espectadores }`. **Sensível a qual sistema a live usa**: se tiver `youtube_video_id`, consulta o YouTube (`audienciaAoVivo`); senão, consulta o servidor de live próprio (`audienciaWebrtc`) — nesse caso a contagem é exata e sempre presente (sessões WHEP/RTMP reais no servidor), diferente do YouTube, cujo campo de espectadores frequentemente vem vazio.
+
+### Servidor de live próprio (WebRTC via SRS)
+Substitui o YouTube pra lives novas. O vendedor transmite direto do navegador (WHIP) ou via OBS (RTMP) pro servidor SRS (repositório separado, `sereniia-org/test-live-server`); espectadores assistem via WHEP (baixa latência) ou HLS. Publish exige um token assinado; assistir é público (sem token), igual o resto da plataforma — quem tem o link/id da live assiste, sem login.
+- **`POST /live-stream/:liveId/publish-token`** — autenticada, mesma checagem de tenancy de sempre (`empresaIdDaLive` + `usuarioPertenceAEmpresa`). Emite um token assinado (HMAC-SHA256, `services/streamAuth.js`/`.ts`) pra iniciar a transmissão dessa live — verificado localmente pelo serviço de auth do servidor de live (sem bater no nosso banco a cada tentativa de conexão, já que o SRS chama isso de forma síncrona). Devolve `{ whip: { url, token, expires_at }, rtmp: { server_url, stream_key, expires_at } }`: WHIP pro navegador (token expira em 5 min — só cobre o handshake de conexão, uma reconexão pede token novo), RTMP pro OBS (token expira em 20 min, já que o OBS não é scriptável do nosso lado pra sempre pedir um novo no reconnect automático). Precisa de `STREAM_SIGNING_SECRET` configurada — tem que ser **exatamente igual** à do serviço de auth na VPS, senão nenhum token é aceito lá.
 
 ### Produtos de uma live
 - **`POST /live-products`** — adiciona um produto à live. Body: o retorno de `GET /produtos/:codigo` + `live_id`.

@@ -15,6 +15,7 @@ import { empresaConfiguracoesRouter } from './routes/empresaConfiguracoes.js';
 import { empresaTemasRouter } from './routes/empresaTemas.js';
 import { comentariosRouter } from './routes/comentarios.js';
 import { roletaRouter } from './routes/roleta.js';
+import { liveStreamRouter } from './routes/liveStream.js';
 
 const app = express();
 app.use(cors());
@@ -29,6 +30,7 @@ app.use('/produtos', produtosRouter);
 app.use('/sync', syncRouter);
 app.use('/lives', livesRouter);
 app.use('/live-products', liveProductsRouter);
+app.use('/live-stream', liveStreamRouter);
 app.use('/cupons', cuponsRouter);
 app.use('/empresa-configuracoes', empresaConfiguracoesRouter);
 app.use('/empresa-temas', empresaTemasRouter);
