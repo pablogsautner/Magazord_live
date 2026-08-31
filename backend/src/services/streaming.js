@@ -22,6 +22,11 @@ export async function audienciaWebrtc(liveId) {
 
   const { streams } = await res.json();
   const stream = streams?.find((s) => s.name === liveId);
-  if (!stream || !stream.live) return { ao_vivo: false, espectadores: null };
-  return { ao_vivo: true, espectadores: stream.viewers?.length ?? null };
+  // whep_url vai sempre junto, ao vivo ou não: quem assiste (frontend do
+  // Kauan ou qualquer outro) não deve saber a URL do servidor de live de
+  // cor (não é escalável — trocar de VPS/região viraria deploy de front) —
+  // pega ela daqui, igual o publish já devolve `whip.url` pronto.
+  const whepUrl = `${config.streaming.serverPublicUrl}/rtc/v1/whep/?app=live&stream=${liveId}`;
+  if (!stream || !stream.live) return { ao_vivo: false, espectadores: null, whep_url: whepUrl };
+  return { ao_vivo: true, espectadores: stream.viewers?.length ?? null, whep_url: whepUrl };
 }

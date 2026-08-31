@@ -115,31 +115,30 @@ Todas as rotas abaixo (exceto onde marcado) exigem `Authorization: Bearer <token
 - **`POST /lives`** — cria uma live. Body: `{ titulo, youtube_video_id? }` — **`youtube_video_id` é opcional**: não é mais pra ter live nova via YouTube (muita gambiarra pra gerenciar o player — tela de "toque pra entrar" travando autoplay, contador de espectador que o YouTube às vezes simplesmente não retorna). Toda live nova é do servidor de live próprio (WebRTC via SRS, ver seção "Servidor de live" abaixo); `youtube_video_id` só continua existindo pra não quebrar lives antigas já criadas. A empresa é resolvida automaticamente pelo vínculo do usuário. `status` começa em `agendada` por padrão (coluna `status` em `lives`, default no banco).
 - **`PATCH /lives/:id`** — edita `titulo`, `youtube_video_id` e/ou `status` (manda só o que for mudar). `status` deve ser um de `agendada`/`ao_vivo`/`encerrada` — é o campo que os widgets públicos (tarja, player fullscreen) ficam sondando pra decidir se mostram ou escondem a live.
 - **`DELETE /lives/:id`** — apaga a live e (por `ON DELETE CASCADE`) todos os produtos dela.
-- **`GET /lives/:id/audiencia`** — pública, sem token. `{ ao_vivo, espectadores }`. **Sensível a qual sistema a live usa**: se tiver `youtube_video_id`, consulta o YouTube (`audienciaAoVivo`); senão, consulta o servidor de live próprio (`audienciaWebrtc`) — nesse caso a contagem é exata e sempre presente (sessões WHEP/RTMP reais no servidor), diferente do YouTube, cujo campo de espectadores frequentemente vem vazio.
+- **`GET /lives/:id/audiencia`** — pública, sem token. `{ ao_vivo, espectadores }`. **Sensível a qual sistema a live usa**: se tiver `youtube_video_id`, consulta o YouTube (`audienciaAoVivo`); senão, consulta o servidor de live próprio (`audienciaWebrtc`) — nesse caso a contagem é exata e sempre presente (sessões WHEP/RTMP reais no servidor), diferente do YouTube, cujo campo de espectadores frequentemente vem vazio. **Nesse caso a resposta também traz `whep_url`** (ex: `https://live.venderiia.com.br/rtc/v1/whep/?app=live&stream=<id>`), pronto pra usar — o frontend nunca precisa saber a URL do servidor de live "de cor" (não seria escalável: trocar de VPS/região viraria deploy de front). Único ponto onde o navegador do espectador fala direto com o servidor de live em vez de com este backend — inerente ao protocolo WHEP (negociação WebRTC é o próprio navegador, não dá pra passar por proxy do nosso lado sem reimplementar sinalização SDP).
 
 ### Servidor de live próprio (WebRTC via SRS)
 Substitui o YouTube pra lives novas. O vendedor transmite direto do navegador (WHIP) ou via OBS (RTMP) pro servidor SRS (repositório separado, `sereniia-org/test-live-server`); espectadores assistem via WHEP (baixa latência) ou HLS. Publish exige um token assinado; assistir é público (sem token), igual o resto da plataforma — quem tem o link/id da live assiste, sem login.
 - **`POST /live-stream/:liveId/publish-token`** — autenticada, mesma checagem de tenancy de sempre (`empresaIdDaLive` + `usuarioPertenceAEmpresa`). Emite um token assinado (HMAC-SHA256, `services/streamAuth.js`/`.ts`) pra iniciar a transmissão dessa live — verificado localmente pelo serviço de auth do servidor de live (sem bater no nosso banco a cada tentativa de conexão, já que o SRS chama isso de forma síncrona). Devolve `{ whip: { url, token, expires_at }, rtmp: { server_url, stream_key, expires_at } }`: WHIP pro navegador (token expira em 5 min — só cobre o handshake de conexão, uma reconexão pede token novo), RTMP pro OBS (token expira em 20 min, já que o OBS não é scriptável do nosso lado pra sempre pedir um novo no reconnect automático). Precisa de `STREAM_SIGNING_SECRET` configurada — tem que ser **exatamente igual** à do serviço de auth na VPS, senão nenhum token é aceito lá.
 
 ### Assistir a live no player do frontend (WhepPlayer)
-`frontend/src/views/player/LivePlayer.vue` hoje sempre renderiza `<YoutubeEmbed :video-id="live.youtube_video_id" />`. Pra lives novas (sem `youtube_video_id`) o vídeo vem do servidor de live próprio via **WHEP** — não dá pra só trocar a `src` de um `<iframe>`, é um protocolo diferente: o navegador negocia WebRTC direto com o SRS (manda um SDP offer por `POST`, recebe um SDP answer, e o `MediaStream` que chega cai dentro de uma tag `<video>`).
+Tem **dois** frontends neste repo: `frontend/` (Vue, MVP inicial) e `livoo-live-shop-web/` (React + TanStack — é o que o Kauan está desenvolvendo de verdade, com comentários/roleta/cupom/produto em destaque já prontos). Nenhum dos dois tem WhepPlayer ainda. O exemplo abaixo é em Vue (mesma stack do `LivePlayer.vue`), mas **o contrato com a API é o mesmo não importa o framework** — é só a parte "3" que muda de sintaxe pra React (hook `useEffect` no lugar de `onMounted`/`onBeforeUnmount`, `useRef` no lugar de `ref`).
 
-**1. Descobrir qual player usar** — é a mesma leitura que o componente já faz hoje (`supabase.from('lives').select('*').eq('id', props.liveId).single()`, RLS pública), só falta o branch, no mesmo espírito do `if (live.youtube_video_id)` que `GET /lives/:id/audiencia` já faz no backend:
+Hoje `LivePlayer.vue` sempre renderiza `<YoutubeEmbed :video-id="live.youtube_video_id" />` (a mesma coisa que `YoutubeEmbed` faz no React, em `livoo-live-shop-web/src/components/player/youtube-embed.tsx`). Pra lives novas (sem `youtube_video_id`) o vídeo vem do servidor de live próprio via **WHEP** — não dá pra só trocar a `src` de um `<iframe>`, é um protocolo diferente: o navegador negocia WebRTC direto com o SRS (manda um SDP offer por `POST`, recebe um SDP answer, e o `MediaStream` que chega cai dentro de uma tag `<video>`).
+
+**1. Descobrir qual player usar e pegar a URL do WHEP** — a mesma chamada que já dá o número de espectadores (`GET /lives/:id/audiencia`, pública, sem token — no React já existe via `useLiveAudiencia`) agora também traz `whep_url` quando a live é WebRTC. **O front nunca constrói essa URL sozinho** (não sabe o domínio do servidor de live, nem precisa saber — é exatamente o ponto de ser "escalável": trocar de VPS/região é mudança só no backend, zero deploy de frontend):
 ```vue
 <YoutubeEmbed v-if="live.youtube_video_id" :video-id="live.youtube_video_id" />
-<WhepPlayer v-else :stream-id="live.id" />
+<WhepPlayer v-else-if="audiencia?.whep_url" :whep-url="audiencia.whep_url" />
 ```
 
-**2. Env nova no frontend** — adiciona em `frontend/.env` (e documenta em `.env.example`): `VITE_STREAM_SERVER_URL=https://live.venderiia.com.br` (a mesma URL do `STREAM_SERVER_PUBLIC_URL` do backend). Assistir é **público, sem token** — igual o resto da plataforma, quem tem o link da live assiste sem login.
-
-**3. `WhepPlayer.vue`** — versão em Vue do `web/assets/whep.js` do repositório `sereniia-org/test-live-server` (mesmo protocolo, já testado e validado em produção: publish → SRS → watch, com vídeo H.264/AAC real chegando no `<video>`). Versão mínima, sem stats/reconexão (pra isso, olha o `whep.js` original, que já tem):
+**2. `WhepPlayer.vue`** — versão em Vue do `web/assets/whep.js` do repositório `sereniia-org/test-live-server` (mesmo protocolo, já testado e validado em produção: publish → SRS → watch, com vídeo H.264/AAC real chegando no `<video>`). Versão mínima, sem stats/reconexão (pra isso, olha o `whep.js` original, que já tem):
 ```vue
 <script setup>
 import { ref, onMounted, onBeforeUnmount } from 'vue';
 
-const props = defineProps({ streamId: { type: String, required: true } });
+const props = defineProps({ whepUrl: { type: String, required: true } });
 const videoEl = ref(null);
-const base = import.meta.env.VITE_STREAM_SERVER_URL;
 let pc = null;
 let resourceUrl = null;
 
@@ -165,7 +164,7 @@ async function conectar() {
     setTimeout(resolve, 2500); // não trava pra sempre se o ICE demorar
   });
 
-  const res = await fetch(`${base}/rtc/v1/whep/?app=live&stream=${props.streamId}`, {
+  const res = await fetch(props.whepUrl, {
     method: 'POST',
     headers: { 'Content-Type': 'application/sdp' },
     body: pc.localDescription.sdp,
@@ -178,7 +177,7 @@ async function conectar() {
 
 onMounted(conectar);
 onBeforeUnmount(async () => {
-  try { if (resourceUrl) await fetch(new URL(resourceUrl, base), { method: 'DELETE' }); } catch { /* ignore */ }
+  try { if (resourceUrl) await fetch(new URL(resourceUrl, props.whepUrl), { method: 'DELETE' }); } catch { /* ignore */ }
   pc?.close();
 });
 </script>
@@ -193,11 +192,11 @@ onBeforeUnmount(async () => {
 ```
 
 **Duas diferenças importantes em relação a só copiar o `whep.js` original:**
-- **`resourceUrl` resolve contra `base` (URL do servidor de live), nunca contra `location.href`** — o `whep.js` original faz `new URL(resource, location.href)` porque a página de debug (`watch.html`) roda no mesmo domínio do servidor de live. Aqui o player vive no domínio da **loja do cliente** (outro domínio); resolver contra `location.href` mandaria o `DELETE` pro lugar errado (a própria loja, não a VPS de live).
-- **Não porta o parâmetro `?eip=`** — no `whep.js` original ele existe pra testes locais/LAN (deriva o IP a partir do `hostname` que você abriu no navegador). Embedado numa loja de cliente, `location.hostname` seria o domínio da loja, sem relação nenhuma com o servidor de live — incluir isso seria, na melhor das hipóteses, inútil, e na pior, uma tentativa de ICE candidate errado. O `CANDIDATE` já configurado no `srs.conf` da VPS (IP público dela) já resolve isso sozinho, sem precisar de parâmetro nenhum vindo do navegador.
+- **`resourceUrl` resolve contra `props.whepUrl` (a própria URL do WHEP, que já é do servidor de live), nunca contra `location.href`** — o `whep.js` original faz `new URL(resource, location.href)` porque a página de debug (`watch.html`) roda no mesmo domínio do servidor de live. Aqui o player vive no domínio da **loja do cliente** (outro domínio); resolver contra `location.href` mandaria o `DELETE` pro lugar errado (a própria loja, não a VPS de live).
+- **Não porta o parâmetro `?eip=`** — no `whep.js` original ele existe pra testes locais/LAN (deriva o IP a partir do `hostname` que você abriu no navegador). Embedado numa loja de cliente, `location.hostname` seria o domínio da loja, sem relação nenhuma com o servidor de live — incluir isso seria, na melhor das hipóteses, inútil, e na pior, uma tentativa de ICE candidate errado. O `CANDIDATE` já configurado no `srs.conf` da VPS (IP público dela) já resolve isso sozinho, sem precisar de parâmetro nenhum vindo do navegador ou de env var nenhuma no front.
 - **CORS**: o proxy `/rtc/*` do serviço de live já responde `access-control-allow-origin: *` inclusive no preflight `OPTIONS` (fix aplicado e testado em produção — antes disso, chamar o WHEP de um domínio diferente do da VPS falhava silenciosamente no preflight, sem erro claro além de "CORS error" no console).
 
-**Pra transmitir** (o vendedor "ir ao vivo", lado publish) o fluxo é: o frontend chama `POST /live-stream/:liveId/publish-token` autenticado, pega o `whip.url`/`whip.token` da resposta, e usa a mesma lógica de `web/assets/whip.js` do `test-live-server` (WHIP em vez de WHEP: `getUserMedia` → oferta SDP → `POST` com o token na query string). Isso ainda não tem um tutorial próprio aqui porque é uma tela nova de admin (não um componente que já existe pra adaptar, como o `LivePlayer.vue`), mas o protocolo e a autenticação já estão prontos e testados — só falta a tela.
+**Pra transmitir** (o vendedor "ir ao vivo", lado publish) o fluxo é: o frontend chama `POST /live-stream/:liveId/publish-token` autenticado, pega o `whip.url`/`whip.token` da resposta (já vem prontos, mesmo raciocínio do `whep_url` — o front não monta URL nenhuma sozinho), e usa a mesma lógica de `web/assets/whip.js` do `test-live-server` (WHIP em vez de WHEP: `getUserMedia` → oferta SDP → `POST` com o token na query string). Isso ainda não tem um tutorial próprio aqui porque é uma tela nova de admin (não um componente que já existe pra adaptar, como o `LivePlayer.vue`/`YoutubeEmbed`), mas o protocolo e a autenticação já estão prontos e testados — só falta a tela.
 
 ### Produtos de uma live
 - **`POST /live-products`** — adiciona um produto à live. Body: o retorno de `GET /produtos/:codigo` + `live_id`.
