@@ -31,11 +31,40 @@ produtosRouter.get('/buscar', async (req, res) => {
   }
 });
 
+// Espalha caracteristicas.dimensoes em colunas soltas pra montar a linha de
+// produto_caracteristicas — dimensoes vem como um objeto só na Magazord.
+function linhaCaracteristicas(codigo, caracteristicas) {
+  const { dimensoes, ...resto } = caracteristicas;
+  return {
+    produto_codigo: codigo,
+    ...resto,
+    peso: dimensoes?.peso ?? null,
+    largura: dimensoes?.largura ?? null,
+    altura: dimensoes?.altura ?? null,
+    comprimento: dimensoes?.comprimento ?? null,
+    atualizado_em: new Date().toISOString(),
+  };
+}
+
 // Usado pelo admin pra buscar/conferir um produto pelo código antes de adicionar na live.
+// Toda vez que isso roda, também atualiza produto_caracteristicas (ficha
+// técnica/descrição) — é o único ponto por onde um produto passa antes de
+// entrar numa live, então é o gancho natural pra manter essa tabela em dia
+// sem precisar de job/infra de sincronização à parte.
 produtosRouter.get('/:codigo', async (req, res) => {
   try {
     const desconto = await descontoPixDoUsuario(req.user.id);
-    const produto = await lookupProduto(req.params.codigo, desconto);
+    const { caracteristicas, ...produto } = await lookupProduto(req.params.codigo, desconto);
+
+    // Best-effort: se o upsert falhar, não deve derrubar a resposta do
+    // lookup (o admin está esperando o preço/estoque, não a ficha técnica).
+    getSupabase()
+      .from('produto_caracteristicas')
+      .upsert(linhaCaracteristicas(req.params.codigo, caracteristicas))
+      .then(({ error }) => {
+        if (error) console.error('upsert produto_caracteristicas falhou:', error.message);
+      });
+
     res.json(produto);
   } catch (err) {
     res.status(502).json({ error: 'magazord_lookup_failed', message: err.message });

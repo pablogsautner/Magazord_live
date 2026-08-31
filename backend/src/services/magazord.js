@@ -100,6 +100,10 @@ export async function lookupProduto(codigoDerivacao, descontoPixPercentual = 0) 
   const imagemPrincipal = detalhe.imagens?.find((img) => img.principal) ?? detalhe.imagens?.[0];
   const precoCartao = precoInfo ? Number(precoInfo.precoVenda) : null;
   const preco = precoCartao !== null ? Number((precoCartao * (1 - descontoPixPercentual / 100)).toFixed(2)) : null;
+  // produtoLoja é um array com um item por loja (mesmo lojaId que getLink já
+  // usa) — carrega a descrição rica (HTML) e ficha técnica que a página de
+  // produto da própria Magazord usa, e que hoje o detalhe descarta.
+  const dadosLoja = detalhe.produtoLoja?.find((p) => p.loja === Number(config.magazord.lojaId));
 
   return {
     produto_codigo: codigoDerivacao,
@@ -109,6 +113,17 @@ export async function lookupProduto(codigoDerivacao, descontoPixPercentual = 0) 
     preco_antigo: precoInfo?.precoAntigo ? Number(precoInfo.precoAntigo) : null,
     estoque,
     url_produto: link ? `${config.magazord.storefrontBaseUrl}/${link}` : null,
+    caracteristicas: {
+      id_produto_magazord: detalhe.idProduto ?? null,
+      titulo: dadosLoja?.titulo ?? null,
+      descricao: dadosLoja?.descricao ?? null,
+      descricao_resumida: dadosLoja?.descricaoResumida ?? null,
+      marca: detalhe.marca?.nome ?? null,
+      categorias: (detalhe.categorias ?? []).map((c) => c.nome),
+      ean: detalhe.ean?.[0] ?? null,
+      dimensoes: detalhe.dimensoes?.[0] ?? null,
+      atributos: detalhe.atributos ?? [],
+    },
   };
 }
 
