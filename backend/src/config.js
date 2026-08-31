@@ -30,6 +30,10 @@ export const config = {
     authServiceUrl: process.env.STREAM_AUTH_SERVICE_URL || '',
     serverPublicUrl: process.env.STREAM_SERVER_PUBLIC_URL || '',
     rtmpPublicUrl: process.env.STREAM_SERVER_RTMP_URL || '',
+    // Credencial do DASHBOARD_USER/DASHBOARD_PASS do serviço de auth — o
+    // /api/summary (usado por audienciaWebrtc) fica atrás de basic auth lá.
+    dashboardUser: process.env.STREAM_DASHBOARD_USER || '',
+    dashboardPass: process.env.STREAM_DASHBOARD_PASS || '',
   },
 };
 

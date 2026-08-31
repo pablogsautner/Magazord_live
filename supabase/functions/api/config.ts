@@ -22,5 +22,9 @@ export const config = {
     authServiceUrl: Deno.env.get('STREAM_AUTH_SERVICE_URL') ?? '',
     serverPublicUrl: Deno.env.get('STREAM_SERVER_PUBLIC_URL') ?? '',
     rtmpPublicUrl: Deno.env.get('STREAM_SERVER_RTMP_URL') ?? '',
+    // Credencial do DASHBOARD_USER/DASHBOARD_PASS do serviço de auth — o
+    // /api/summary (usado por audienciaWebrtc) fica atrás de basic auth lá.
+    dashboardUser: Deno.env.get('STREAM_DASHBOARD_USER') ?? '',
+    dashboardPass: Deno.env.get('STREAM_DASHBOARD_PASS') ?? '',
   },
 };

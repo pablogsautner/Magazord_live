@@ -9,7 +9,12 @@ import { config } from '../config.js';
 // terceiro que pode vir vazia).
 export async function audienciaWebrtc(liveId) {
   const url = `${config.streaming.authServiceUrl}/api/summary`;
-  const res = await fetch(url, { signal: AbortSignal.timeout(3000) });
+  const headers = {};
+  if (config.streaming.dashboardUser) {
+    const credencial = Buffer.from(`${config.streaming.dashboardUser}:${config.streaming.dashboardPass}`).toString('base64');
+    headers.Authorization = `Basic ${credencial}`;
+  }
+  const res = await fetch(url, { headers, signal: AbortSignal.timeout(3000) });
   if (!res.ok) {
     const body = await res.text().catch(() => '');
     throw new Error(`Serviço de streaming ${url} -> HTTP ${res.status}: ${body}`);
