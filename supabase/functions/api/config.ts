@@ -27,4 +27,7 @@ export const config = {
     dashboardUser: Deno.env.get('STREAM_DASHBOARD_USER') ?? '',
     dashboardPass: Deno.env.get('STREAM_DASHBOARD_PASS') ?? '',
   },
+  // Segredo comparado de forma timing-safe em POST /metricas/capturar, pra
+  // permitir o pg_cron (sem usuário nenhum) disparar a captura periódica.
+  metricsCronSecret: Deno.env.get('METRICS_CRON_SECRET') ?? '',
 };

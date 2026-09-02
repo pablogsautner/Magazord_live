@@ -16,6 +16,7 @@ import { empresaTemasRouter } from './routes/empresaTemas.js';
 import { comentariosRouter } from './routes/comentarios.js';
 import { roletaRouter } from './routes/roleta.js';
 import { liveStreamRouter } from './routes/liveStream.js';
+import { metricasRouter } from './routes/metricas.js';
 
 const app = express();
 app.use(cors());
@@ -45,6 +46,9 @@ app.use('/empresas', limiteInterno, empresasRouter);
 app.use('/usuarios', limiteInterno, usuariosRouter);
 app.use('/membros', limiteInterno, membrosRouter);
 app.use('/configuracoes', limiteInterno, configuracoesRouter);
+// POST /capturar aceita também o segredo do pg_cron (sem usuário); o resto do
+// router exige super-admin, então entra no mesmo grupo de rate limit interno.
+app.use('/metricas', limiteInterno, metricasRouter);
 
 app.listen(config.port, () => {
   console.log(`backend rodando em http://localhost:${config.port}`);

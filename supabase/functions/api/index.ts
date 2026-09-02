@@ -14,6 +14,7 @@ import { empresaTemasRouter } from './routes/empresaTemas.ts';
 import { comentariosRouter } from './routes/comentarios.ts';
 import { roletaRouter } from './routes/roleta.ts';
 import { liveStreamRouter } from './routes/liveStream.ts';
+import { metricasRouter } from './routes/metricas.ts';
 
 // basePath('/api') porque a função se chama "api" — o Supabase invoca em
 // .../functions/v1/api/..., e o Hono precisa saber esse prefixo pra rotear certo.
@@ -38,5 +39,6 @@ app.route('/empresas', empresasRouter);
 app.route('/usuarios', usuariosRouter);
 app.route('/membros', membrosRouter);
 app.route('/configuracoes', configuracoesRouter);
+app.route('/metricas', metricasRouter);
 
 Deno.serve(app.fetch);

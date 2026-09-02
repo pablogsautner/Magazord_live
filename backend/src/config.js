@@ -35,6 +35,9 @@ export const config = {
     dashboardUser: process.env.STREAM_DASHBOARD_USER || '',
     dashboardPass: process.env.STREAM_DASHBOARD_PASS || '',
   },
+  // Segredo comparado de forma timing-safe em POST /metricas/capturar, pra
+  // permitir o pg_cron (sem usuário nenhum) disparar a captura periódica.
+  metricsCronSecret: process.env.METRICS_CRON_SECRET || '',
 };
 
 export { required };

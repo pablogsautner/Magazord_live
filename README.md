@@ -17,6 +17,7 @@
   11. `011_desconto_pix.sql` — adiciona `desconto_pix_percentual` em `empresa_configuracoes`, usado pra calcular o preço de Pix exibido na live (a Magazord não expõe isso pela API).
   12. `012_live_stream_webrtc.sql` — `youtube_video_id` vira opcional: lives novas não usam mais YouTube, só o servidor de live próprio (WebRTC).
   13. `013_produto_caracteristicas.sql` — tabela `produto_caracteristicas` (ficha técnica/descrição, leitura pública), populada pelo backend a cada lookup de produto (`GET /produtos/:codigo`).
+  14. `014_metricas_lives.sql` — tabela `metricas_lives_snapshot` (histórico de audiência por live, sem leitura pública — só painel interno) + função `metricas_lives_historico` usada por `GET /metricas/historico`.
 
 ## Como a autenticação funciona (importante ler antes de mexer)
 
@@ -252,6 +253,9 @@ Guardado numa tabela própria (`empresa_temas`), separada de `empresa_configurac
 - **`GET /usuarios`**, **`POST /usuarios`** (`{ email, password }`), **`DELETE /usuarios/:id`** — gerencia usuários do Supabase Auth.
 - **`GET /membros?empresa_id=<id>`**, **`POST /membros`** (`{ user_id, empresa_id, papel }`), **`DELETE /membros/:id`** — liga/desliga usuário de empresa.
 - **`GET /configuracoes`**, **`PUT /configuracoes/:chave`** (`{ valor, criptografado }`) — configurações globais da plataforma (ex: `youtube_api_key`). Valores criptografados nunca voltam na resposta.
+- **`GET /metricas?empresa_id=<opcional>`** — visão cross-empresa em tempo real: lives `ao_vivo` agora (com audiência atual, cruzando com o servidor de live) + saúde do servidor (`servidor: { cpu, mem, conns, uptime_s, recv_bytes, send_bytes }`) + um resumo `por_empresa`. Sem `empresa_id`, mostra tudo; com ele, filtra pra uma empresa só (é um filtro pro super-admin fazer drill-down, não um controle de acesso — só super-admin chama isso de qualquer forma).
+- **`GET /metricas/historico?horas=24&empresa_id=<opcional>`** — série temporal (uma linha por captura) a partir do que foi salvo em `metricas_lives_snapshot`.
+- **`POST /metricas/capturar`** — grava um snapshot agora (lives ao vivo + audiência de cada uma) em `metricas_lives_snapshot`. Aceita **dois jeitos de autorizar**: o header `X-Cron-Secret` (`METRICS_CRON_SECRET`, pro `pg_cron` do Supabase chamar sozinho a cada 15 min — ver `supabase/014_metricas_lives.sql`) **ou** uma sessão de super-admin normal (captura manual "na hora", sem esperar o próximo tick do cron). Histórico só é confiável se a amostragem for regular, por isso a captura de fundo é por tempo (cron), não "toda vez que alguém abre `GET /metricas`" — senão a live mais olhada pareceria artificialmente mais popular.
 
 ## Segurança — o que já está feito
 
