@@ -30,15 +30,19 @@ function autorizarCaptura(req, res, next) {
 // também precisa aceitar a chamada do pg_cron, que não tem usuário nenhum.
 metricasRouter.post('/capturar', autorizarCaptura, async (req, res) => {
   try {
-    const { streams } = await resumoStreaming();
     const supabase = getSupabase();
     const { data: lives } = await supabase.from('lives').select('id, empresa_id').eq('status', 'ao_vivo');
-    const linhas = (lives ?? []).map((live) => ({
+    // Sem live ao vivo, não tem por que consultar o servidor de live — evita
+    // bater nele a cada 15 min pra sempre, mesmo quando não tem nada rodando.
+    if (!lives?.length) return res.json({ ok: true, capturado: 0 });
+
+    const { streams } = await resumoStreaming();
+    const linhas = lives.map((live) => ({
       live_id: live.id,
       empresa_id: live.empresa_id,
       espectadores: streams?.find((s) => s.name === live.id)?.viewers?.length ?? null,
     }));
-    if (linhas.length) await supabase.from('metricas_lives_snapshot').insert(linhas);
+    await supabase.from('metricas_lives_snapshot').insert(linhas);
     res.json({ ok: true, capturado: linhas.length });
   } catch (err) {
     res.status(502).json({ error: 'captura_failed', message: err.message });
@@ -57,12 +61,15 @@ metricasRouter.get('/', async (req, res) => {
   let query = supabase.from('lives').select('id, titulo, empresa_id, created_at, empresas(nome)').eq('status', 'ao_vivo');
   if (empresaId) query = query.eq('empresa_id', empresaId);
 
-  const [{ data: lives, error }, resumo] = await Promise.all([
-    query,
-    // Servidor de live fora do ar não deveria derrubar a listagem de lives.
-    resumoStreaming().catch(() => ({ server: null, streams: [] })),
-  ]);
+  const { data: lives, error } = await query;
   if (error) return res.status(500).json({ error: 'metricas_failed', message: error.message });
+
+  // Só consulta o servidor de live se tiver pelo menos 1 live ao vivo — sem
+  // isso, não tem nada rodando lá pra pedir audiência, e o servidor fora do
+  // ar não deveria derrubar essa resposta de qualquer forma.
+  const resumo = lives?.length
+    ? await resumoStreaming().catch(() => ({ server: null, streams: [] }))
+    : { server: null, streams: [] };
 
   const livesComAudiencia = (lives ?? []).map((live) => ({
     ...live,
