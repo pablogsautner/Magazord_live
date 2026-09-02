@@ -2,6 +2,7 @@ import { Hono } from 'npm:hono@4';
 import { getSupabase } from '../services/supabase.ts';
 import { requireUser } from '../middleware/requireUser.ts';
 import { empresaUnicaDoUsuario, usuarioPertenceAEmpresa } from '../services/tenancy.ts';
+import { TEMA_PADRAO_CLARO, TEMA_PADRAO_ESCURO } from '../services/temas.ts';
 
 export const empresaTemasRouter = new Hono();
 empresaTemasRouter.use('*', requireUser);
@@ -35,10 +36,12 @@ empresaTemasRouter.get('/me', async (c) => {
   const { data, error } = await supabase.from('empresa_temas').select().eq('empresa_id', empresaId);
   if (error) return c.json({ error: 'query_failed', message: error.message }, 500);
 
+  // Fallback pra paleta padrão da plataforma se faltar linha — não deveria
+  // acontecer (POST /empresas sempre cria os 2 modos na hora), mas cobre
+  // dado legado/incompleto em vez de devolver 404 e travar a tela de edição.
   const lista = data as any[];
-  const claro = lista.find((tema) => tema.modo === 'claro');
-  const escuro = lista.find((tema) => tema.modo === 'escuro');
-  if (!claro || !escuro) return c.json({ error: 'temas_nao_encontrados' }, 404);
+  const claro = lista.find((tema) => tema.modo === 'claro') ?? { empresa_id: empresaId, modo: 'claro', ...TEMA_PADRAO_CLARO };
+  const escuro = lista.find((tema) => tema.modo === 'escuro') ?? { empresa_id: empresaId, modo: 'escuro', ...TEMA_PADRAO_ESCURO };
 
   return c.json({ empresa_id: empresaId, claro, escuro });
 });

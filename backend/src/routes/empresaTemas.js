@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { getSupabase } from '../services/supabase.js';
 import { requireUser } from '../middleware/requireUser.js';
 import { empresaUnicaDoUsuario, usuarioPertenceAEmpresa } from '../services/tenancy.js';
+import { TEMA_PADRAO_CLARO, TEMA_PADRAO_ESCURO } from '../services/temas.js';
 
 export const empresaTemasRouter = Router();
 empresaTemasRouter.use(requireUser);
@@ -34,9 +35,11 @@ empresaTemasRouter.get('/me', async (req, res) => {
   const { data, error } = await supabase.from('empresa_temas').select().eq('empresa_id', empresaId);
   if (error) return res.status(500).json({ error: 'query_failed', message: error.message });
 
-  const claro = data.find((tema) => tema.modo === 'claro');
-  const escuro = data.find((tema) => tema.modo === 'escuro');
-  if (!claro || !escuro) return res.status(404).json({ error: 'temas_nao_encontrados' });
+  // Fallback pra paleta padrão da plataforma se faltar linha — não deveria
+  // acontecer (POST /empresas sempre cria os 2 modos na hora), mas cobre
+  // dado legado/incompleto em vez de devolver 404 e travar a tela de edição.
+  const claro = data.find((tema) => tema.modo === 'claro') ?? { empresa_id: empresaId, modo: 'claro', ...TEMA_PADRAO_CLARO };
+  const escuro = data.find((tema) => tema.modo === 'escuro') ?? { empresa_id: empresaId, modo: 'escuro', ...TEMA_PADRAO_ESCURO };
 
   res.json({ empresa_id: empresaId, claro, escuro });
 });

@@ -3,6 +3,7 @@ import { getSupabase } from '../services/supabase.ts';
 import { requireUser } from '../middleware/requireUser.ts';
 import { requireSuperAdmin } from '../middleware/requireSuperAdmin.ts';
 import { encrypt } from '../services/crypto.ts';
+import { TEMA_PADRAO_CLARO, TEMA_PADRAO_ESCURO } from '../services/temas.ts';
 
 export const empresasRouter = new Hono();
 empresasRouter.use('*', requireUser, requireSuperAdmin);
@@ -68,20 +69,8 @@ empresasRouter.post('/', async (c) => {
   const empresaId = (data as any).id;
   await supabase.from('empresa_configuracoes').insert({ empresa_id: empresaId, nome_loja: nome });
   await supabase.from('empresa_temas').insert([
-    { empresa_id: empresaId, modo: 'claro' },
-    {
-      empresa_id: empresaId,
-      modo: 'escuro',
-      primary_color: '#f5f5f5',
-      primary_foreground: '#171717',
-      primary_hover: '#e5e5e5',
-      page_background: '#0a0a0a',
-      card_background: '#171717',
-      card_border: '#262626',
-      heading_color: '#fafafa',
-      subheading_color: '#a3a3a3',
-      body_text_color: '#d4d4d4',
-    },
+    { empresa_id: empresaId, modo: 'claro', ...TEMA_PADRAO_CLARO },
+    { empresa_id: empresaId, modo: 'escuro', ...TEMA_PADRAO_ESCURO },
   ]);
 
   return c.json(data, 201);
