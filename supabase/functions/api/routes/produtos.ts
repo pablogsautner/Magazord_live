@@ -1,5 +1,5 @@
 import { Hono } from 'npm:hono@4';
-import { lookupProduto, buscarProdutosPorNome } from '../services/magazord.ts';
+import { lookupProduto, buscarProdutosPorNome, getDerivacoes } from '../services/magazord.ts';
 import { requireUser } from '../middleware/requireUser.ts';
 import { empresaUnicaDoUsuario } from '../services/tenancy.ts';
 import { getSupabase } from '../services/supabase.ts';
@@ -68,5 +68,17 @@ produtosRouter.get('/:codigo', async (c) => {
     return c.json(produto);
   } catch (err) {
     return c.json({ error: 'magazord_lookup_failed', message: (err as Error).message }, 502);
+  }
+});
+
+// Lista as derivações do mesmo produto pai (não é sempre "cor" — depende do
+// produto, pode ser modelo/tamanho/etc.) — útil pra tela de produto mostrar
+// um seletor de variação. Aceita qualquer derivação do produto, não precisa
+// já saber o código do pai.
+produtosRouter.get('/:codigo/derivacoes', async (c) => {
+  try {
+    return c.json(await getDerivacoes(c.req.param('codigo')));
+  } catch (err) {
+    return c.json({ error: 'magazord_derivacoes_failed', message: (err as Error).message }, 502);
   }
 });

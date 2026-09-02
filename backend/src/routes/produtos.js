@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { lookupProduto, buscarProdutosPorNome } from '../services/magazord.js';
+import { lookupProduto, buscarProdutosPorNome, getDerivacoes } from '../services/magazord.js';
 import { requireUser } from '../middleware/requireUser.js';
 import { empresaUnicaDoUsuario } from '../services/tenancy.js';
 import { getSupabase } from '../services/supabase.js';
@@ -68,5 +68,17 @@ produtosRouter.get('/:codigo', async (req, res) => {
     res.json(produto);
   } catch (err) {
     res.status(502).json({ error: 'magazord_lookup_failed', message: err.message });
+  }
+});
+
+// Lista as derivações do mesmo produto pai (não é sempre "cor" — depende do
+// produto, pode ser modelo/tamanho/etc.) — útil pra tela de produto mostrar
+// um seletor de variação. Aceita qualquer derivação do produto, não precisa
+// já saber o código do pai.
+produtosRouter.get('/:codigo/derivacoes', async (req, res) => {
+  try {
+    res.json(await getDerivacoes(req.params.codigo));
+  } catch (err) {
+    res.status(502).json({ error: 'magazord_derivacoes_failed', message: err.message });
   }
 });

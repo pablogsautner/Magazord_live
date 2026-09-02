@@ -53,6 +53,18 @@ async function getEstoqueUnificado(codigoProduto, codigoDerivacaoOriginal) {
   return estoques.reduce((total, estoque) => total + estoque, 0);
 }
 
+// Lista as derivações do mesmo produto pai — não necessariamente "cores" (o
+// nome genérico da Magazord é "derivação" mesmo: pode ser cor, tamanho,
+// modelo etc. dependendo do produto). Recebe QUALQUER derivação do produto
+// (não precisa já saber o código do pai) e resolve por dentro, igual
+// getEstoqueUnificado já faz.
+export async function getDerivacoes(codigoDerivacao) {
+  const detalhe = await getDetalhe(codigoDerivacao);
+  const { data } = await magazordGet(`/v2/site/produto?codigo=${encodeURIComponent(detalhe.codigoProduto)}`);
+  const derivacoes = data.items[0]?.derivacoes ?? [];
+  return derivacoes.map((d) => ({ codigo: d.codigo, nome: d.nome, ativo: d.ativo }));
+}
+
 async function getPreco(codigoDerivacao) {
   const { data } = await magazordGet(
     `/v1/listPreco?produto=${encodeURIComponent(codigoDerivacao)}&tabelaPreco=${config.magazord.tabelaPrecoId}`
