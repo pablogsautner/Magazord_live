@@ -37,3 +37,14 @@ export async function empresaIdDoLiveProduct(liveProductId) {
   if (error) throw error;
   return data.lives.empresa_id;
 }
+
+export async function empresaIdDoComentario(comentarioId) {
+  const supabase = getSupabase();
+  const { data, error } = await supabase
+    .from('comentarios')
+    .select('live_id, lives(empresa_id)')
+    .eq('id', comentarioId)
+    .single();
+  if (error) throw error;
+  return data.lives.empresa_id;
+}

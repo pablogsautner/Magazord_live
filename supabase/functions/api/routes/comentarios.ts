@@ -1,5 +1,7 @@
 import { Hono } from 'npm:hono@4';
 import { getSupabase } from '../services/supabase.ts';
+import { requireUser } from '../middleware/requireUser.ts';
+import { empresaIdDoComentario, usuarioPertenceAEmpresa } from '../services/tenancy.ts';
 
 export const comentariosRouter = new Hono();
 
@@ -33,4 +35,22 @@ comentariosRouter.post('/', async (c) => {
     .single();
   if (error) return c.json({ error: 'insert_failed', message: error.message }, 500);
   return c.json(data, 201);
+});
+
+// Moderação: quem gerencia a live apaga um comentário impróprio. Único ponto
+// deste router que exige login — POST acima continua público de propósito.
+comentariosRouter.delete('/:id', requireUser, async (c) => {
+  const id = c.req.param('id');
+  const user = c.get('user') as { id: string };
+
+  const empresaId = await empresaIdDoComentario(id).catch(() => null);
+  if (!empresaId) return c.json({ error: 'comentario_nao_encontrado' }, 404);
+  if (!(await usuarioPertenceAEmpresa(user.id, empresaId))) {
+    return c.json({ error: 'forbidden' }, 403);
+  }
+
+  const supabase = getSupabase();
+  const { error } = await supabase.from('comentarios').delete().eq('id', id);
+  if (error) return c.json({ error: 'delete_failed', message: error.message }, 500);
+  return c.body(null, 204);
 });

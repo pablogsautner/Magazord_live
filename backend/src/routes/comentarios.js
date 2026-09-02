@@ -1,5 +1,7 @@
 import { Router } from 'express';
 import { getSupabase } from '../services/supabase.js';
+import { requireUser } from '../middleware/requireUser.js';
+import { empresaIdDoComentario, usuarioPertenceAEmpresa } from '../services/tenancy.js';
 
 export const comentariosRouter = Router();
 
@@ -33,4 +35,19 @@ comentariosRouter.post('/', async (req, res) => {
     .single();
   if (error) return res.status(500).json({ error: 'insert_failed', message: error.message });
   res.status(201).json(data);
+});
+
+// Moderação: quem gerencia a live apaga um comentário impróprio. Único ponto
+// deste router que exige login — POST acima continua público de propósito.
+comentariosRouter.delete('/:id', requireUser, async (req, res) => {
+  const empresaId = await empresaIdDoComentario(req.params.id).catch(() => null);
+  if (!empresaId) return res.status(404).json({ error: 'comentario_nao_encontrado' });
+  if (!(await usuarioPertenceAEmpresa(req.user.id, empresaId))) {
+    return res.status(403).json({ error: 'forbidden' });
+  }
+
+  const supabase = getSupabase();
+  const { error } = await supabase.from('comentarios').delete().eq('id', req.params.id);
+  if (error) return res.status(500).json({ error: 'delete_failed', message: error.message });
+  res.status(204).end();
 });

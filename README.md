@@ -227,6 +227,7 @@ Sorteio ponderado por live (cada item tem um `peso`; quanto maior, mais chance).
 ### Chat da live (comentários)
 Diferente de todo o resto da API — essa é a **primeira rota pública sem autenticação** do sistema, porque quem comenta é o espectador anônimo assistindo pelo player, não um usuário logado da plataforma. Por isso a escrita não é liberada direto no Supabase (evitaria virar porta aberta pra spam/flood): passa por uma rota pública do backend, com validação de tamanho e sob o rate limiting geral.
 - **`POST /comentarios`** — **sem token**. Body: `{ live_id, nome, texto }` (`nome`: 1–60 caracteres; `texto`: 1–500 caracteres). `404` se a live não existir.
+- **`DELETE /comentarios/:id`** — autenticada, tenancy via `empresaIdDoComentario` (resolve a empresa pelo `live_id` do comentário) + `usuarioPertenceAEmpresa`, mesmo padrão de `DELETE /live-products/:id`. Único ponto autenticado deste router — moderação: quem gerencia a live apaga um comentário impróprio. Delete de verdade (sem soft-delete/auditoria). **Nota pro front**: o hook de Realtime do player hoje só assina `event: "INSERT"` — pra um comentário apagado sumir na hora pra quem já está com o chat aberto (não só depois de recarregar), precisa também assinar `DELETE` e remover do estado local.
 - Leitura é direta no Supabase (`comentarios`, RLS pública) — o player deve usar **Realtime** (`postgres_changes` filtrando por `live_id`) pra mostrar o chat entrando na hora, sem precisar de polling.
 
 ### Audiência ao vivo (YouTube)
