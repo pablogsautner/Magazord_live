@@ -4,6 +4,7 @@ import { requireUser } from '../middleware/requireUser.ts';
 import { empresaUnicaDoUsuario, empresaIdDaLive, usuarioPertenceAEmpresa } from '../services/tenancy.ts';
 import { audienciaAoVivo } from '../services/youtube.ts';
 import { audienciaWebrtc } from '../services/streaming.ts';
+import { historicoAudienciaLive } from '../services/metricas.ts';
 
 export const livesRouter = new Hono();
 
@@ -84,6 +85,26 @@ livesRouter.patch('/:id', async (c) => {
   const { data, error } = await supabase.from('lives').update(campos).eq('id', id).select().single();
   if (error) return c.json({ error: 'update_failed', message: error.message }, 500);
   return c.json(data);
+});
+
+// Histórico de audiência dessa live só (não confundir com GET /:id/audiencia,
+// que é tempo real e público) — pro lojista ver na tela de gerenciar/insights
+// da própria live. Mesma checagem de tenancy de PATCH/DELETE acima.
+livesRouter.get('/:id/metricas', async (c) => {
+  const id = c.req.param('id');
+  const user = c.get('user') as { id: string };
+
+  const empresaId = await empresaIdDaLive(id).catch(() => null);
+  if (!empresaId) return c.json({ error: 'live_nao_encontrada' }, 404);
+  if (!(await usuarioPertenceAEmpresa(user.id, empresaId))) {
+    return c.json({ error: 'forbidden' }, 403);
+  }
+
+  try {
+    return c.json(await historicoAudienciaLive(id));
+  } catch (err) {
+    return c.json({ error: 'metricas_failed', message: (err as Error).message }, 500);
+  }
 });
 
 livesRouter.delete('/:id', async (c) => {

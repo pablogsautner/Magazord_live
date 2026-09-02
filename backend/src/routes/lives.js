@@ -4,6 +4,7 @@ import { requireUser } from '../middleware/requireUser.js';
 import { empresaUnicaDoUsuario, empresaIdDaLive, usuarioPertenceAEmpresa } from '../services/tenancy.js';
 import { audienciaAoVivo } from '../services/youtube.js';
 import { audienciaWebrtc } from '../services/streaming.js';
+import { historicoAudienciaLive } from '../services/metricas.js';
 
 export const livesRouter = Router();
 
@@ -82,6 +83,23 @@ livesRouter.patch('/:id', async (req, res) => {
 
   if (error) return res.status(500).json({ error: 'update_failed', message: error.message });
   res.json(data);
+});
+
+// Histórico de audiência dessa live só (não confundir com GET /:id/audiencia,
+// que é tempo real e público) — pro lojista ver na tela de gerenciar/insights
+// da própria live. Mesma checagem de tenancy de PATCH/DELETE acima.
+livesRouter.get('/:id/metricas', async (req, res) => {
+  const empresaId = await empresaIdDaLive(req.params.id).catch(() => null);
+  if (!empresaId) return res.status(404).json({ error: 'live_nao_encontrada' });
+  if (!(await usuarioPertenceAEmpresa(req.user.id, empresaId))) {
+    return res.status(403).json({ error: 'forbidden' });
+  }
+
+  try {
+    res.json(await historicoAudienciaLive(req.params.id));
+  } catch (err) {
+    res.status(500).json({ error: 'metricas_failed', message: err.message });
+  }
 });
 
 livesRouter.delete('/:id', async (req, res) => {
