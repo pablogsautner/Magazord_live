@@ -16,7 +16,7 @@ async function buscarResumoStreaming() {
     const body = await res.text().catch(() => '');
     throw new Error(`Serviço de streaming ${url} -> HTTP ${res.status}: ${body}`);
   }
-  return res.json(); // { server, streams, events }
+  return res.json(); // { servidores: [...], streams, events } — servidores é 1 por instância (sharding)
 }
 
 export async function resumoStreaming() {

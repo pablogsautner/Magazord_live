@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { config } from '../config.js';
 import { requireUser } from '../middleware/requireUser.js';
 import { empresaIdDaLive, usuarioPertenceAEmpresa } from '../services/tenancy.js';
-import { mintPublishToken } from '../services/streamAuth.js';
+import { mintPublishToken, portaRtmpDaLive } from '../services/streamAuth.js';
 
 export const liveStreamRouter = Router();
 liveStreamRouter.use(requireUser);
@@ -32,7 +32,11 @@ liveStreamRouter.post('/:liveId/publish-token', async (req, res) => {
       expires_at: whip.expires_at,
     },
     rtmp: {
-      server_url: config.streaming.rtmpPublicUrl,
+      // Porta varia por live (sharding — cada instância do servidor de live
+      // ocupa uma porta RTMP diferente); WHIP/WHEP acima não precisam disso,
+      // sempre passam pela mesma URL pública, quem decide a instância é o
+      // proxy do lado de lá.
+      server_url: `${config.streaming.rtmpHost}:${portaRtmpDaLive(liveId)}/live`,
       stream_key: `${liveId}?token=${rtmp.token}`,
       expires_at: rtmp.expires_at,
     },

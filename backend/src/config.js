@@ -29,7 +29,20 @@ export const config = {
     signingSecret: process.env.STREAM_SIGNING_SECRET || '',
     authServiceUrl: process.env.STREAM_AUTH_SERVICE_URL || '',
     serverPublicUrl: process.env.STREAM_SERVER_PUBLIC_URL || '',
-    rtmpPublicUrl: process.env.STREAM_SERVER_RTMP_URL || '',
+    // Só protocolo+host (ex: rtmp://live.suaempresa.com.br), SEM porta/path —
+    // a porta é calculada por live (ver streamAuth.js: portaRtmpDaLive), já
+    // que cada instância do servidor de live (sharding) usa uma porta RTMP
+    // diferente. Antes disso existir, essa variável guardava a URL completa
+    // (com porta e /live já embutidos) — nome mudou de propósito
+    // (STREAM_SERVER_RTMP_URL -> STREAM_SERVER_RTMP_HOST) pra forçar
+    // reconfigurar em vez de guardar o valor errado silenciosamente.
+    rtmpHost: process.env.STREAM_SERVER_RTMP_HOST || '',
+    // Precisam bater com o docker-compose.yml do test-live-server: quantas
+    // instâncias de SRS existem (SRS_INSTANCIAS lá) e a primeira porta RTMP
+    // (RTMP_PORT da instância 0). As portas seguintes são sequenciais
+    // (rtmpPortaBase, +1, +2...), uma por instância.
+    shardCount: Number(process.env.STREAM_SHARD_COUNT || 4),
+    rtmpPortaBase: Number(process.env.STREAM_RTMP_PORTA_BASE || 1935),
     // Credencial do DASHBOARD_USER/DASHBOARD_PASS do serviço de auth — o
     // /api/summary (usado por audienciaWebrtc) fica atrás de basic auth lá.
     dashboardUser: process.env.STREAM_DASHBOARD_USER || '',

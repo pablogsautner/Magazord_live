@@ -68,8 +68,8 @@ metricasRouter.get('/', async (req, res) => {
   // isso, não tem nada rodando lá pra pedir audiência, e o servidor fora do
   // ar não deveria derrubar essa resposta de qualquer forma.
   const resumo = lives?.length
-    ? await resumoStreaming().catch(() => ({ server: null, streams: [] }))
-    : { server: null, streams: [] };
+    ? await resumoStreaming().catch(() => ({ servidores: [], streams: [] }))
+    : { servidores: [], streams: [] };
 
   const livesComAudiencia = (lives ?? []).map((live) => ({
     ...live,
@@ -91,7 +91,9 @@ metricasRouter.get('/', async (req, res) => {
   }
 
   res.json({
-    servidor: resumo.server,
+    // Array, 1 por instância do servidor de live (sharding) — não é mais 1
+    // objeto só, já que agora são vários processos SRS separados.
+    servidores: resumo.servidores,
     lives_ao_vivo: livesComAudiencia,
     total_lives_ao_vivo: livesComAudiencia.length,
     total_espectadores: livesComAudiencia.reduce((soma, l) => soma + (l.espectadores ?? 0), 0),

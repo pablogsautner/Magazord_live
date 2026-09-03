@@ -21,7 +21,16 @@ export const config = {
     signingSecret: Deno.env.get('STREAM_SIGNING_SECRET') ?? '',
     authServiceUrl: Deno.env.get('STREAM_AUTH_SERVICE_URL') ?? '',
     serverPublicUrl: Deno.env.get('STREAM_SERVER_PUBLIC_URL') ?? '',
-    rtmpPublicUrl: Deno.env.get('STREAM_SERVER_RTMP_URL') ?? '',
+    // Só protocolo+host, SEM porta/path — porta é calculada por live (ver
+    // streamAuth.ts: portaRtmpDaLive), já que cada instância do servidor de
+    // live (sharding) usa uma porta RTMP diferente. Nome mudou de propósito
+    // (STREAM_SERVER_RTMP_URL -> STREAM_SERVER_RTMP_HOST) pra forçar
+    // reconfigurar em vez de guardar o valor antigo (URL completa) errado.
+    rtmpHost: Deno.env.get('STREAM_SERVER_RTMP_HOST') ?? '',
+    // Precisam bater com o docker-compose.yml do test-live-server: quantas
+    // instâncias de SRS existem (SRS_INSTANCIAS lá) e a primeira porta RTMP.
+    shardCount: Number(Deno.env.get('STREAM_SHARD_COUNT') ?? '4'),
+    rtmpPortaBase: Number(Deno.env.get('STREAM_RTMP_PORTA_BASE') ?? '1935'),
     // Credencial do DASHBOARD_USER/DASHBOARD_PASS do serviço de auth — o
     // /api/summary (usado por audienciaWebrtc) fica atrás de basic auth lá.
     dashboardUser: Deno.env.get('STREAM_DASHBOARD_USER') ?? '',
