@@ -58,11 +58,40 @@ async function getEstoqueUnificado(codigoProduto, codigoDerivacaoOriginal) {
 // modelo etc. dependendo do produto). Recebe QUALQUER derivação do produto
 // (não precisa já saber o código do pai) e resolve por dentro, igual
 // getEstoqueUnificado já faz.
+//
+// As fotos NÃO vêm de /v2/site/produtoDerivacoes (conferido direto na API
+// real: essa lista só tem metadados — peso, EAN, datas — nenhum campo de
+// imagem) nem do array "derivacoes" de /v2/site/produto (só tem
+// codigo/nome/ativo). Só o /v3/produtos/derivacao/{codigo}/detail (mesmo
+// endpoint do getDetalhe/lookupProduto) tem o array "imagens" de verdade —
+// por isso busca o detalhe de CADA derivação aqui (1 request a mais por
+// derivação; aceitável porque só roda quando alguém abre as opções do
+// produto, não em toda listagem). Não busca estoque/preço por derivação:
+// estoque é deliberadamente unificado (ver getEstoqueUnificado), e preço
+// seria mais uma chamada por derivação sem necessidade nesta tela.
 export async function getDerivacoes(codigoDerivacao) {
   const detalhe = await getDetalhe(codigoDerivacao);
   const { data } = await magazordGet(`/v2/site/produto?codigo=${encodeURIComponent(detalhe.codigoProduto)}`);
   const derivacoes = data.items[0]?.derivacoes ?? [];
-  return derivacoes.map((d) => ({ codigo: d.codigo, nome: d.nome, ativo: d.ativo }));
+
+  const detalhes = await Promise.all(
+    derivacoes.map((d) =>
+      d.codigo === codigoDerivacao ? detalhe : getDetalhe(d.codigo).catch(() => null)
+    )
+  );
+
+  return derivacoes.map((d, i) => {
+    const det = detalhes[i];
+    const imagens = det?.imagens ?? [];
+    const imagemPrincipal = escolherImagemPrincipal(imagens);
+    return {
+      codigo: d.codigo,
+      nome: d.nome,
+      ativo: d.ativo,
+      imagem_url: imagemPrincipal?.url ?? null,
+      imagens: imagens.map((img) => img.url),
+    };
+  });
 }
 
 async function getPreco(codigoDerivacao) {
@@ -70,6 +99,20 @@ async function getPreco(codigoDerivacao) {
     `/v1/listPreco?produto=${encodeURIComponent(codigoDerivacao)}&tabelaPreco=${config.magazord.tabelaPrecoId}`
   );
   return data[0] ?? null;
+}
+
+// Às vezes o cadastro tem MAIS de uma imagem marcada "principal: true" (visto
+// em dados reais: sobe uma foto genérica da família do produto marcada
+// principal, depois sobe a foto de verdade da cor/derivação TAMBÉM marcada
+// principal, sem desmarcar a antiga). A última do array é a mais confiável
+// (a mais recente, geralmente a que bate com a derivação específica) — usar
+// a primeira (find simples) pega a genérica errada. Sem nenhuma marcada, cai
+// pra última imagem da lista pelo mesmo motivo (upload mais recente = fim).
+function escolherImagemPrincipal(imagens = []) {
+  for (let i = imagens.length - 1; i >= 0; i--) {
+    if (imagens[i].principal) return imagens[i];
+  }
+  return imagens[imagens.length - 1] ?? null;
 }
 
 async function getLink(codigoDerivacao) {
@@ -109,7 +152,7 @@ export async function lookupProduto(codigoDerivacao, descontoPixPercentual = 0) 
     getLink(codigoDerivacao),
   ]);
 
-  const imagemPrincipal = detalhe.imagens?.find((img) => img.principal) ?? detalhe.imagens?.[0];
+  const imagemPrincipal = escolherImagemPrincipal(detalhe.imagens);
   const precoCartao = precoInfo ? Number(precoInfo.precoVenda) : null;
   const preco = precoCartao !== null ? Number((precoCartao * (1 - descontoPixPercentual / 100)).toFixed(2)) : null;
   // produtoLoja é um array com um item por loja (mesmo lojaId que getLink já
