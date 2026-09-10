@@ -5,6 +5,37 @@ import { empresaUnicaDoUsuario } from '../services/tenancy.ts';
 import { getSupabase } from '../services/supabase.ts';
 
 export const produtosRouter = new Hono();
+
+// ─── Rotas PÚBLICAS ──────────────────────────────────────────────────────────
+// O player da live (espectador anônimo) mostra o seletor de cor/tamanho e as
+// fotos por cor. Ficam ANTES do requireUser — mesmo padrão de
+// GET /lives/:id/audiencia. Não expõem nada sensível (mesma info da página
+// pública da loja); o serviço tem cache curto (1 min) pra aguentar muita gente
+// na mesma live abrindo o mesmo produto — ver services/magazord.ts.
+
+// Seletor de variação da página de produto (cor/tamanho/etc.) — do feed da
+// vitrine da Magazord. Aceita qualquer derivação, resolve o pai por dentro.
+// `?completo=1` agrega preço/estoque/foto por cor (do mesmo feed, sem chamada
+// extra). Ver getDerivacoes em services/magazord.ts pro contrato de resposta.
+produtosRouter.get('/:codigo/derivacoes', async (c) => {
+  try {
+    return c.json(await getDerivacoes(c.req.param('codigo'), { completo: c.req.query('completo') === '1' }));
+  } catch (err) {
+    return c.json({ error: 'magazord_derivacoes_failed', message: (err as Error).message }, 502);
+  }
+});
+
+// Mídias (fotos/vídeos) só da derivação informada — buscadas sob demanda
+// quando o espectador escolhe uma cor, pra trocar a foto grande do produto.
+produtosRouter.get('/:codigo/midia', async (c) => {
+  try {
+    return c.json(await getMidiasDerivacao(c.req.param('codigo')));
+  } catch (err) {
+    return c.json({ error: 'magazord_midia_failed', message: (err as Error).message }, 502);
+  }
+});
+
+// ─── Daqui pra baixo: exige login (uso do painel/admin) ──────────────────────
 produtosRouter.use('*', requireUser);
 
 async function descontoPixDoUsuario(userId: string) {
@@ -68,27 +99,5 @@ produtosRouter.get('/:codigo', async (c) => {
     return c.json(produto);
   } catch (err) {
     return c.json({ error: 'magazord_lookup_failed', message: (err as Error).message }, 502);
-  }
-});
-
-// Seletor de variação da página de produto (cor/tamanho/etc.) — do feed da
-// vitrine da Magazord. Aceita qualquer derivação, resolve o pai por dentro.
-// `?completo=1` agrega preço/estoque/foto por cor (do mesmo feed, sem chamada
-// extra). Ver getDerivacoes em services/magazord.ts pro contrato de resposta.
-produtosRouter.get('/:codigo/derivacoes', async (c) => {
-  try {
-    return c.json(await getDerivacoes(c.req.param('codigo'), { completo: c.req.query('completo') === '1' }));
-  } catch (err) {
-    return c.json({ error: 'magazord_derivacoes_failed', message: (err as Error).message }, 502);
-  }
-});
-
-// Mídias (fotos/vídeos) só da derivação informada — buscadas sob demanda
-// quando o usuário escolhe uma cor no seletor, pra trocar a foto do produto.
-produtosRouter.get('/:codigo/midia', async (c) => {
-  try {
-    return c.json(await getMidiasDerivacao(c.req.param('codigo')));
-  } catch (err) {
-    return c.json({ error: 'magazord_midia_failed', message: (err as Error).message }, 502);
   }
 });

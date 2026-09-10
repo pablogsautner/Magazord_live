@@ -62,6 +62,19 @@ async function getCdnBase() {
   return cdnBaseCache;
 }
 
+// Cache curto (1 min) pras rotas de derivação/mídia — elas são PÚBLICAS (o
+// player anônimo da live consome). Numa live cheia vários espectadores abrem
+// o mesmo produto quase juntos; sem isso, cada um dispara 2+N chamadas à
+// Magazord pro mesmo dado. TTL curto porque preço/estoque mudam durante a live.
+const cacheCurtoStore = new Map();
+async function cacheCurto(chave, produzir, ttlMs = 60_000) {
+  const hit = cacheCurtoStore.get(chave);
+  if (hit && Date.now() - hit.ts < ttlMs) return hit.valor;
+  const valor = await produzir();
+  cacheCurtoStore.set(chave, { ts: Date.now(), valor });
+  return valor;
+}
+
 async function getEstoque(codigoDerivacao) {
   const { data } = await magazordGet(`/v1/listEstoque?produto=${encodeURIComponent(codigoDerivacao)}`);
   return data.reduce((total, deposito) => total + (deposito.quantidadeDisponivelVenda || 0), 0);
@@ -124,14 +137,21 @@ function valorLimpo(nomeFilho, nomePai) {
 // N eixos desde já pra página ficar certa se um multi-eixo aparecer.
 //
 // completo=true extrai também preço/estoque/foto do MESMO feed (sem chamada
-// extra). Custo: 2 + N chamadas (N = derivações ativas), em paralelo; o hook
-// do front cacheia 5 min. Só derivações ativas entram (é o que a página mostra).
+// extra). Custo: 2 + N chamadas (N = derivações ativas), em paralelo; passa
+// por cacheCurto (1 min) porque a rota é pública e o front cacheia 5 min.
+// Só derivações ativas entram (é o que a página mostra).
 /**
  * @param {string} codigoDerivacao  Qualquer código de derivação do produto.
  * @param {{completo?: boolean}} [opts]
  * @returns {Promise<Derivacao[] | DerivacaoCompleta[]>}
  */
-export async function getDerivacoes(codigoDerivacao, { completo = false } = {}) {
+export function getDerivacoes(codigoDerivacao, { completo = false } = {}) {
+  return cacheCurto(`deriv|${codigoDerivacao}|${completo ? 'c' : ''}`, () =>
+    buscarDerivacoes(codigoDerivacao, completo)
+  );
+}
+
+async function buscarDerivacoes(codigoDerivacao, completo) {
   const detalhe = await getDetalhe(codigoDerivacao);
   if (!detalhe?.codigoProduto) throw new Error(`Derivação ${codigoDerivacao} não encontrada na Magazord`);
   const [prod, cdn] = await Promise.all([
@@ -185,11 +205,15 @@ export async function getDerivacoes(codigoDerivacao, { completo = false } = {}) 
  * Mídias só da derivação informada — rota dedicada da Magazord, traz apenas as
  * fotos daquela cor/variação (não as genéricas da família, que o /v3/.../detail
  * mistura). Resolve o pai por dentro. Buscada sob demanda quando o usuário
- * escolhe a cor no seletor.
+ * escolhe a cor no seletor. Rota pública — passa por cacheCurto (1 min).
  * @param {string} codigoDerivacao
  * @returns {Promise<{url: string, url_original: string, principal: boolean, ordem: number, alt: string|null, tipo: number}[]>}
  */
-export async function getMidiasDerivacao(codigoDerivacao) {
+export function getMidiasDerivacao(codigoDerivacao) {
+  return cacheCurto(`midia|${codigoDerivacao}`, () => buscarMidiasDerivacao(codigoDerivacao));
+}
+
+async function buscarMidiasDerivacao(codigoDerivacao) {
   const detalhe = await getDetalhe(codigoDerivacao);
   if (!detalhe?.codigoProduto) throw new Error(`Derivação ${codigoDerivacao} não encontrada na Magazord`);
   const [{ data }, cdn] = await Promise.all([
