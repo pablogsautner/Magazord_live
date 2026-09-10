@@ -29,6 +29,23 @@ livesRouter.get('/:id/audiencia', async (req, res) => {
   }
 });
 
+// Produtos ativos da live, na ordem de exibição — o que o player mostra na
+// tela. Antes o front lia `live_products` direto do Supabase (RLS pública);
+// passou pra cá pra a leitura inicial ser sempre pelo backend (service role,
+// shape controlado). A assinatura Realtime dos updates ao vivo (produto
+// adicionado/removido/destacado no meio da live) continua no canal do
+// Supabase — isso o backend não faz push.
+livesRouter.get('/:id/produtos', async (req, res) => {
+  const { data, error } = await getSupabase()
+    .from('live_products')
+    .select('*')
+    .eq('live_id', req.params.id)
+    .eq('ativo', true)
+    .order('ordem');
+  if (error) return res.status(500).json({ error: 'query_failed', message: error.message });
+  res.json(data ?? []);
+});
+
 livesRouter.use(requireUser);
 
 livesRouter.post('/', async (req, res) => {

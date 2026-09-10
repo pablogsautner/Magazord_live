@@ -35,6 +35,21 @@ produtosRouter.get('/:codigo/midia', async (c) => {
   }
 });
 
+// Ficha técnica/descrição do produto (tabela produto_caracteristicas, mantida
+// em dia pelo upsert best-effort do GET /produtos/:codigo). O player mostra
+// isso. Antes o front lia direto do Supabase (RLS pública); passou pra cá pra
+// a leitura ser sempre pelo backend (service role, shape controlado). `data`
+// pode ser null (produto que nunca passou por um lookup) — 200 com null.
+produtosRouter.get('/:codigo/caracteristicas', async (c) => {
+  const { data, error } = await getSupabase()
+    .from('produto_caracteristicas')
+    .select('*')
+    .eq('produto_codigo', c.req.param('codigo'))
+    .maybeSingle();
+  if (error) return c.json({ error: 'query_failed', message: error.message }, 500);
+  return c.json(data ?? null);
+});
+
 // ─── Daqui pra baixo: exige login (uso do painel/admin) ──────────────────────
 produtosRouter.use('*', requireUser);
 
