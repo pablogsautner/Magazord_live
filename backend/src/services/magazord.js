@@ -35,6 +35,33 @@ async function getDetalhe(codigoDerivacao) {
   return detalhe;
 }
 
+// Feed da vitrine — MESMA fonte que a página de produto da Magazord usa pra
+// renderizar. Só aceita CÓDIGO DE DERIVAÇÃO (não o código cru do produto pai —
+// esse dá 404 em produtos do tipo "Cor - Exibe Filhos"). Num JSON só:
+// `derivacao_nome` (limpo), `derivacao_codigo_pai`, `valor`/`valor_de`/
+// `percentual_desconto`, `qtde_estoque`, `midias[]` (com `nivel_relacionamento`
+// 1=foto da cor, 2=genérica), `caracteristicas[]`, e `derivacoes_produto[0]`
+// (o(s) eixo(s) dessa derivação). getLink já batia aqui só pra pegar o `.link`.
+async function magazordFrontend(codigo) {
+  const { data } = await magazordGet(
+    `/v2/site/frontend/produto/${config.magazord.lojaId}/${encodeURIComponent(codigo)}`
+  );
+  return data;
+}
+
+let cdnBaseCache = null;
+// Host do CDN pra montar URL absoluta — o feed da vitrine e a rota de mídia
+// devolvem caminho relativo ("img/2022/.../x.jpg"). Vem de /v2/site/loja
+// (campo urlImagem, ex: "https://feiraodetoalhas.cdn.magazord.com.br"). Config
+// de loja é estática: resolve uma vez e cacheia pelo processo.
+async function getCdnBase() {
+  if (cdnBaseCache) return cdnBaseCache;
+  const { data } = await magazordGet('/v2/site/loja');
+  const loja = data.items.find((l) => String(l.id) === String(config.magazord.lojaId)) ?? data.items[0];
+  cdnBaseCache = (loja?.urlImagem || '').replace(/\/+$/, '');
+  return cdnBaseCache;
+}
+
 async function getEstoque(codigoDerivacao) {
   const { data } = await magazordGet(`/v1/listEstoque?produto=${encodeURIComponent(codigoDerivacao)}`);
   return data.reduce((total, deposito) => total + (deposito.quantidadeDisponivelVenda || 0), 0);
@@ -53,45 +80,135 @@ async function getEstoqueUnificado(codigoProduto, codigoDerivacaoOriginal) {
   return estoques.reduce((total, estoque) => total + estoque, 0);
 }
 
-// Lista as derivações do mesmo produto pai — não necessariamente "cores" (o
-// nome genérico da Magazord é "derivação" mesmo: pode ser cor, tamanho,
-// modelo etc. dependendo do produto). Recebe QUALQUER derivação do produto
-// (não precisa já saber o código do pai) e resolve por dentro, igual
-// getEstoqueUnificado já faz.
+/**
+ * @typedef {object} Variacao   Um eixo da derivação (cor, tamanho, ...).
+ * @property {string|null} eixo   Nome do eixo — "Cor", "Tamanho", ...
+ * @property {string|null} valor  Valor nesse eixo — "Amarelo Claro", "G", ...
+ *
+ * @typedef {object} Derivacao
+ * @property {string}  codigo      Código da derivação (usar em cart / próximas chamadas).
+ * @property {string|null} nome    Rótulo pronto — valores dos eixos juntos ("Azul / G").
+ * @property {boolean} ativo
+ * @property {Variacao[]} variacoes  Um item por eixo — array pro seletor agrupar.
+ * @property {string|null} swatch_url  Chip de cor, quando o produto tem (raro).
+ *
+ * @typedef {Derivacao & {
+ *   preco: number|null, preco_antigo: number|null, desconto_percentual: number,
+ *   estoque: number|null, imagem_url: string|null
+ * }} DerivacaoCompleta
+ */
+
+// Fallback pro nome limpo da derivação quando o feed da vitrine não responde:
+// tira o nome do pai como prefixo do nome cheio do filho ("<pai> - <valor>").
+// Se o prefixo não bater, pega o último trecho depois de " - "; senão, o cheio.
+function valorLimpo(nomeFilho, nomePai) {
+  const filho = (nomeFilho || '').trim();
+  const pai = (nomePai || '').trim();
+  if (pai && filho.startsWith(pai)) {
+    const resto = filho.slice(pai.length).replace(/^\s*[-–—]\s*/, '').trim();
+    if (resto) return resto;
+  }
+  const partes = filho.split(/\s+[-–—]\s+/);
+  return partes.length > 1 ? partes[partes.length - 1].trim() : filho || null;
+}
+
+// Derivações (variações) do mesmo produto pai, no formato que a PÁGINA DE
+// PRODUTO da Magazord usa pra montar o seletor de variação.
 //
-// As fotos NÃO vêm de /v2/site/produtoDerivacoes (conferido direto na API
-// real: essa lista só tem metadados — peso, EAN, datas — nenhum campo de
-// imagem) nem do array "derivacoes" de /v2/site/produto (só tem
-// codigo/nome/ativo). Só o /v3/produtos/derivacao/{codigo}/detail (mesmo
-// endpoint do getDetalhe/lookupProduto) tem o array "imagens" de verdade —
-// por isso busca o detalhe de CADA derivação aqui (1 request a mais por
-// derivação; aceitável porque só roda quando alguém abre as opções do
-// produto, não em toda listagem). Não busca estoque/preço por derivação:
-// estoque é deliberadamente unificado (ver getEstoqueUnificado), e preço
-// seria mais uma chamada por derivação sem necessidade nesta tela.
-export async function getDerivacoes(codigoDerivacao) {
+// `/v2/site/produto?codigo=<pai>` dá o roster de irmãs (id/codigo/nome/ativo) —
+// funciona pros dois tipos de eixo ("Exibe Pai" e "Exibe Filhos"). Pra cada
+// irmã ATIVA, o feed da vitrine (/v2/site/frontend/produto/<lojaId>/<codigo>)
+// dá o nome limpo ("Amarelo Claro") e o(s) eixo(s) ("Cor"/"Tamanho") —
+// `derivacoes_produto[0].derivacoes` é ARRAY, 1 entrada por eixo. Neste
+// catálogo é sempre "Cor" (tamanho é produto pai separado), mas tratamos como
+// N eixos desde já pra página ficar certa se um multi-eixo aparecer.
+//
+// completo=true extrai também preço/estoque/foto do MESMO feed (sem chamada
+// extra). Custo: 2 + N chamadas (N = derivações ativas), em paralelo; o hook
+// do front cacheia 5 min. Só derivações ativas entram (é o que a página mostra).
+/**
+ * @param {string} codigoDerivacao  Qualquer código de derivação do produto.
+ * @param {{completo?: boolean}} [opts]
+ * @returns {Promise<Derivacao[] | DerivacaoCompleta[]>}
+ */
+export async function getDerivacoes(codigoDerivacao, { completo = false } = {}) {
   const detalhe = await getDetalhe(codigoDerivacao);
-  const { data } = await magazordGet(`/v2/site/produto?codigo=${encodeURIComponent(detalhe.codigoProduto)}`);
-  const derivacoes = data.items[0]?.derivacoes ?? [];
+  if (!detalhe?.codigoProduto) throw new Error(`Derivação ${codigoDerivacao} não encontrada na Magazord`);
+  const [prod, cdn] = await Promise.all([
+    magazordGet(`/v2/site/produto?codigo=${encodeURIComponent(detalhe.codigoProduto)}`),
+    getCdnBase(),
+  ]);
+  const nomePai = prod.data.items[0]?.nome ?? null;
+  const irmas = (prod.data.items[0]?.derivacoes ?? []).filter((d) => d.ativo);
 
-  const detalhes = await Promise.all(
-    derivacoes.map((d) =>
-      d.codigo === codigoDerivacao ? detalhe : getDetalhe(d.codigo).catch(() => null)
-    )
+  return Promise.all(
+    irmas.map(async (irma) => {
+      const feed = await magazordFrontend(irma.codigo).catch(() => null);
+
+      // No feed chamado POR DERIVAÇÃO, `derivacoes_produto` é a lista chapada
+      // dos eixos dessa derivação (1 item por eixo) — não a lista de irmãs
+      // (essa forma só vem quando se chama pelo código do pai).
+      const variacoes = (feed?.derivacoes_produto ?? [])
+        .slice()
+        .sort((a, b) => (a.ordem ?? 0) - (b.ordem ?? 0))
+        .map((e) => ({ eixo: e.deri_nome ?? null, valor: e.derivacao ?? null }));
+      const chip = feed?.derivacoes_produto?.[0];
+
+      const item = {
+        codigo: irma.codigo,
+        nome: feed?.derivacao_nome ?? valorLimpo(irma.nome, nomePai),
+        ativo: irma.ativo,
+        variacoes: variacoes.length
+          ? variacoes
+          : [{ eixo: null, valor: feed?.derivacao_nome ?? valorLimpo(irma.nome, nomePai) }],
+        swatch_url: chip?.midia_path ? `${cdn}/${chip.midia_path}${chip.midia_arquivo_nome}` : null,
+      };
+      if (!completo) return item;
+
+      const capa =
+        (feed?.midias ?? [])
+          .filter((m) => m.nivel_relacionamento === 1)
+          .sort((a, b) => (a.ordem ?? 0) - (b.ordem ?? 0))[0] ?? (feed?.midias ?? [])[0];
+      return {
+        ...item,
+        preco: feed?.valor ?? null,
+        preco_antigo: feed?.valor_de ?? null,
+        desconto_percentual: feed?.percentual_desconto ?? 0,
+        estoque: feed?.qtde_estoque ?? null,
+        imagem_url: capa ? `${cdn}/${capa.path}${capa.arquivo_nome}` : null,
+      };
+    })
   );
+}
 
-  return derivacoes.map((d, i) => {
-    const det = detalhes[i];
-    const imagens = det?.imagens ?? [];
-    const imagemPrincipal = escolherImagemPrincipal(imagens);
-    return {
-      codigo: d.codigo,
-      nome: d.nome,
-      ativo: d.ativo,
-      imagem_url: imagemPrincipal?.url ?? null,
-      imagens: imagens.map((img) => img.url),
-    };
-  });
+/**
+ * Mídias só da derivação informada — rota dedicada da Magazord, traz apenas as
+ * fotos daquela cor/variação (não as genéricas da família, que o /v3/.../detail
+ * mistura). Resolve o pai por dentro. Buscada sob demanda quando o usuário
+ * escolhe a cor no seletor.
+ * @param {string} codigoDerivacao
+ * @returns {Promise<{url: string, url_original: string, principal: boolean, ordem: number, alt: string|null, tipo: number}[]>}
+ */
+export async function getMidiasDerivacao(codigoDerivacao) {
+  const detalhe = await getDetalhe(codigoDerivacao);
+  if (!detalhe?.codigoProduto) throw new Error(`Derivação ${codigoDerivacao} não encontrada na Magazord`);
+  const [{ data }, cdn] = await Promise.all([
+    magazordGet(
+      `/v2/site/produto/${encodeURIComponent(detalhe.codigoProduto)}/derivacao/${encodeURIComponent(codigoDerivacao)}/midia`
+    ),
+    getCdnBase(),
+  ]);
+  const abs = (p) => `${cdn}/${String(p || '').replace(/^\/+/, '')}`;
+  return (data.items ?? [])
+    .map((m) => ({
+      url: abs(m.urlConsultaMidia), // versão "medium"
+      url_original: abs(m.urlOriginal), // tamanho cheio
+      principal: !!m.principal,
+      ordem: m.ordem ?? 0,
+      alt: m.midiaAlt || null,
+      tipo: m.midiaTipo, // 1 = imagem
+    }))
+    .sort((a, b) => Number(b.principal) - Number(a.principal) || a.ordem - b.ordem);
 }
 
 async function getPreco(codigoDerivacao) {
@@ -116,10 +233,7 @@ function escolherImagemPrincipal(imagens = []) {
 }
 
 async function getLink(codigoDerivacao) {
-  const { data } = await magazordGet(
-    `/v2/site/frontend/produto/${config.magazord.lojaId}/${encodeURIComponent(codigoDerivacao)}`
-  );
-  return data.link;
+  return (await magazordFrontend(codigoDerivacao)).link;
 }
 
 export async function buscarProdutosPorNome(nome, limite = 15) {

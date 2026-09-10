@@ -1,5 +1,5 @@
 import { Hono } from 'npm:hono@4';
-import { lookupProduto, buscarProdutosPorNome, getDerivacoes } from '../services/magazord.ts';
+import { lookupProduto, buscarProdutosPorNome, getDerivacoes, getMidiasDerivacao } from '../services/magazord.ts';
 import { requireUser } from '../middleware/requireUser.ts';
 import { empresaUnicaDoUsuario } from '../services/tenancy.ts';
 import { getSupabase } from '../services/supabase.ts';
@@ -71,14 +71,24 @@ produtosRouter.get('/:codigo', async (c) => {
   }
 });
 
-// Lista as derivações do mesmo produto pai (não é sempre "cor" — depende do
-// produto, pode ser modelo/tamanho/etc.) — útil pra tela de produto mostrar
-// um seletor de variação. Aceita qualquer derivação do produto, não precisa
-// já saber o código do pai.
+// Seletor de variação da página de produto (cor/tamanho/etc.) — do feed da
+// vitrine da Magazord. Aceita qualquer derivação, resolve o pai por dentro.
+// `?completo=1` agrega preço/estoque/foto por cor (do mesmo feed, sem chamada
+// extra). Ver getDerivacoes em services/magazord.ts pro contrato de resposta.
 produtosRouter.get('/:codigo/derivacoes', async (c) => {
   try {
-    return c.json(await getDerivacoes(c.req.param('codigo')));
+    return c.json(await getDerivacoes(c.req.param('codigo'), { completo: c.req.query('completo') === '1' }));
   } catch (err) {
     return c.json({ error: 'magazord_derivacoes_failed', message: (err as Error).message }, 502);
+  }
+});
+
+// Mídias (fotos/vídeos) só da derivação informada — buscadas sob demanda
+// quando o usuário escolhe uma cor no seletor, pra trocar a foto do produto.
+produtosRouter.get('/:codigo/midia', async (c) => {
+  try {
+    return c.json(await getMidiasDerivacao(c.req.param('codigo')));
+  } catch (err) {
+    return c.json({ error: 'magazord_midia_failed', message: (err as Error).message }, 502);
   }
 });

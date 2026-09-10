@@ -109,7 +109,51 @@ Todas as rotas abaixo (exceto onde marcado) exigem `Authorization: Bearer <token
 ### Produtos (proxy da Magazord)
 - **`GET /produtos/buscar?nome=<texto>`** — autocomplete por nome (mín. 3 caracteres), até 15 resultados: `[{ codigo, nome }]`. Um resultado por produto **pai** (não por variação/cor) — a Magazord retorna cada cor como uma "derivação" separada, então sem essa deduplicação uma única toalha com 20 cores lotaria a lista inteira e esconderia os outros produtos. O `codigo` devolvido é o de uma derivação ativa qualquer (usado só pra puxar preço/estoque/link em `GET /produtos/:codigo`).
 - **`GET /produtos/:codigo`** — detalhe + preço + estoque + link da loja num JSON só: `{ produto_codigo, nome, imagem_url, preco, preco_antigo, estoque, url_produto }`. **`estoque` é unificado**: soma o saldo de todas as derivações (cores) ativas do mesmo produto pai, não só da cor recebida em `:codigo` — na Magazord cada cor tem estoque próprio e independente (ex: Branco com 465, Azul com 535), então sem essa soma o número mostrado refletiria só 1 cor entre várias. **`preco` é o preço do Pix**, não o de cartão: a Magazord só retorna pela API o preço "de cartão" (`listPreco`) — o desconto de Pix não é exposto em nenhum endpoint deles (testamos `configuracaoPagamento` e `forma-recebimento`), é config só do checkout/tema da loja. Por isso aplicamos aqui o `desconto_pix_percentual` cadastrado em `/empresa-configuracoes` sobre o preço de cartão. Se a empresa não cadastrar esse %, fica `0` e `preco` sai igual ao de cartão mesmo. **Efeito colateral (de propósito)**: essa chamada também faz upsert em `produto_caracteristicas` (ficha técnica/descrição — ver abaixo) — é o único ponto por onde um produto passa antes de entrar numa live, então é o gancho natural pra manter aquela tabela em dia sem precisar de job de sincronização à parte. Falha nesse upsert é só logada, nunca derruba a resposta do lookup.
-- **`GET /produtos/:codigo/derivacoes`** — lista as outras derivações do mesmo produto pai, com foto: `[{ codigo, nome, ativo, imagem_url, imagens }]`. Aceita qualquer derivação (não precisa já saber o código do pai — resolve por dentro, igual `GET /produtos/:codigo` já faz pro estoque unificado). Chamado de "derivação" de propósito, não "cor": nem todo produto varia por cor (pode ser modelo, tamanho etc.), então o nome genérico da própria Magazord é o certo aqui. **As fotos exigem 1 chamada à Magazord por derivação** (busca o `/detail` de cada uma — é o único endpoint que tem o array `imagens` de verdade; nem `/v2/site/produtoDerivacoes` nem o array `derivacoes` de `/v2/site/produto` trazem foto, só metadados). Isso é aceitável porque só roda quando alguém abre as opções do produto, não em toda listagem — mas não busca estoque/preço por derivação (estoque é deliberadamente unificado, preço seria mais chamadas sem necessidade aqui). Quando o cadastro tem mais de uma imagem marcada `principal: true` na Magazord (comum: sobem uma foto genérica da família do produto marcada principal, depois a foto real da cor, também marcada principal, sem desmarcar a antiga), `imagem_url` usa a **última** — é a mais recente e a que de fato bate com a derivação (confirmado comparando nome do arquivo com a cor em vários produtos reais); sem nenhuma marcada, mesma lógica com a última imagem da lista. Essa mesma correção vale pra `GET /produtos/:codigo` (`lookupProduto` usa a mesma função agora).
+#### Página de produto: seletor de derivação e mídias
+
+Dois endpoints pra montar a página/seletor de variação de um produto. Ambos aceitam **qualquer** código de derivação e resolvem o produto pai por dentro (mesmo padrão de `GET /produtos/:codigo`). Tudo sai do **feed da vitrine da Magazord** (`/v2/site/frontend/produto/<loja>/<codigo>`) — a mesma fonte que a própria página de produto da loja usa pra renderizar; nada é heurística sobre string.
+
+**`GET /produtos/:codigo/derivacoes`** → `Derivacao[]` — as variações ativas do mesmo produto pai, no formato do seletor:
+
+| campo | tipo | o que é |
+|---|---|---|
+| `codigo` | string | código da derivação — usar no carrinho e nas próximas chamadas |
+| `nome` | string | rótulo pronto — só a cor/tamanho (`"Amarelo Claro"`), **não** o nome cheio do produto. Multi-eixo: valores juntos (`"Azul / G"`) |
+| `ativo` | boolean | sempre `true` no retorno (feed só lista o que a página mostra) — mantido explícito no contrato |
+| `variacoes` | `{ eixo, valor }[]` | uma entrada por eixo. `eixo` = `"Cor"` / `"Tamanho"` / …; `valor` = `"Amarelo Claro"`. Array desde já pra um produto multi-eixo (cor + tamanho) ser renderizado certo — **neste catálogo é sempre 1 eixo "Cor"** (tamanho, quando existe, é produto pai separado tipo `RFEMCLM`/`RFEMCLG`) |
+| `swatch_url` | string \| null | chip de cor cadastrado no produto — quase sempre `null` nesta loja (o front desenha o swatch por nome/hex) |
+
+**`GET /produtos/:codigo/derivacoes?completo=1`** → `DerivacaoCompleta[]` — os mesmos itens + preço/estoque/foto por cor (do mesmo feed, sem chamada extra):
+
+| campo extra | tipo | |
+|---|---|---|
+| `preco` / `preco_antigo` | number \| null | preço "de" e "por" **de cartão** dessa cor (não aplica desconto de Pix aqui — isso é só no `GET /produtos/:codigo`) |
+| `desconto_percentual` | number | `0` quando não há |
+| `estoque` | number \| null | saldo **daquela cor** (aqui não é unificado — o seletor precisa saber cor a cor o que dá pra comprar) |
+| `imagem_url` | string \| null | capa da cor (1ª mídia específica da derivação) |
+
+**`GET /produtos/:codigo/midia`** → `Midia[]` — só as fotos/vídeos **daquela derivação** (não as genéricas da família), da rota dedicada `/v2/site/produto/:pai/derivacao/:filho/midia`. Buscada sob demanda quando o usuário escolhe uma cor, pra trocar a foto grande.
+
+| campo | tipo | |
+|---|---|---|
+| `url` / `url_original` | string | versão `medium` / tamanho cheio (absolutas, no CDN da loja) |
+| `principal` | boolean | primeiro no array já vem o principal |
+| `ordem` | number | |
+| `alt` | string \| null | |
+| `tipo` | number | `1` = imagem (outros = vídeo/outro, não confirmados) |
+
+**Exemplo** (`GET /produtos/2QTFBESPRINTNEW1/derivacoes`):
+```json
+[
+  { "codigo": "2QTFBESPRINTNEW1", "nome": "Amarelo Claro", "ativo": true,
+    "variacoes": [{ "eixo": "Cor", "valor": "Amarelo Claro" }], "swatch_url": null },
+  { "codigo": "2QTFBESPRINTNEW2", "nome": "Amarelo Ouro", "ativo": true,
+    "variacoes": [{ "eixo": "Cor", "valor": "Amarelo Ouro" }], "swatch_url": null }
+]
+```
+Ilustrativo multi-eixo (não ocorre neste catálogo): `{ "nome": "Azul / G", "variacoes": [{ "eixo": "Cor", "valor": "Azul" }, { "eixo": "Tamanho", "valor": "G" }] }`.
+
+**Custo/performance**: `/derivacoes` (com ou sem `?completo=1`) = `2 + N` chamadas à Magazord, `N` = nº de cores ativas, em paralelo — o hook do front (`useProdutoDerivacoes`) cacheia 5 min. `/midia` = 2 chamadas. Erro da Magazord (ex: `/midia` de derivação inexistente) → `502` `magazord_midia_failed` / `magazord_derivacoes_failed`.
 - **`produto_caracteristicas`** (tabela, leitura pública direto no Supabase — RLS, sem rota HTTP própria, mesmo padrão de `live_products`/`comentarios`): `{ produto_codigo, id_produto_magazord, titulo, descricao, descricao_resumida, marca, categorias, ean, peso, largura, altura, comprimento, atributos, atualizado_em }`. `atributos` é uma lista `{ nome, valor }` de schema variável por categoria de produto (ex: "Composição", "Gramatura") — guardada como JSONB em vez de normalizada, já que é só pra listar/exibir, não pra filtrar por atributo específico. `descricao` é HTML rico (o mesmo texto da página de produto da própria Magazord). `id_produto_magazord` é o id numérico interno da Magazord (diferente do `produto_codigo`, que é a derivação) — guardado pensando numa etapa futura de avaliações, que são indexadas por esse número; não é usado por nada ainda. Linha ausente pra um `produto_codigo` = esse produto nunca passou por um `GET /produtos/:codigo` (não deveria acontecer com produto já numa live, já que adicionar exige buscar antes).
 
 ### Sincronização
