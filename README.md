@@ -134,13 +134,13 @@ Dois endpoints pra montar a página/seletor de variação de um produto. **Públ
 | `estoque` | number \| null | saldo **daquela cor** (aqui não é unificado — o seletor precisa saber cor a cor o que dá pra comprar) |
 | `imagem_url` | string \| null | capa da cor (1ª mídia específica da derivação) |
 
-**`GET /produtos/:codigo/midia`** → `Midia[]` — só as fotos/vídeos **daquela derivação** (não as genéricas da família), da rota dedicada `/v2/site/produto/:pai/derivacao/:filho/midia`. Buscada sob demanda quando o usuário escolhe uma cor, pra trocar a foto grande.
+**`GET /produtos/:codigo/midia`** → `Midia[]` — a(s) foto(s) **daquela cor/derivação** **junto com** as genéricas do produto pai (as mesmas que aparecem na página do produto — texturas, "still", etc., sem cor nenhuma), específica(s) primeiro. Vem do mesmo feed da vitrine que o `?completo=1` usa (1 chamada só). Buscada sob demanda quando o usuário escolhe uma cor, pra montar a galeria/trocar a foto grande.
 
 | campo | tipo | |
 |---|---|---|
-| `url` / `url_original` | string | versão `medium` / tamanho cheio (absolutas, no CDN da loja) |
-| `principal` | boolean | primeiro no array já vem o principal |
-| `ordem` | number | |
+| `url` | string | absoluta, no CDN da loja |
+| `especifica` | boolean | `true` = só dessa cor; `false` = genérica do produto pai (compartilhada entre todas as cores) |
+| `ordem` | number | ordem dentro do próprio grupo (específicas / genéricas) — já vem no array na ordem certa de exibição (específicas primeiro) |
 | `alt` | string \| null | |
 | `tipo` | number | `1` = imagem (outros = vídeo/outro, não confirmados) |
 
@@ -155,7 +155,17 @@ Dois endpoints pra montar a página/seletor de variação de um produto. **Públ
 ```
 Ilustrativo multi-eixo (não ocorre neste catálogo): `{ "nome": "Azul / G", "variacoes": [{ "eixo": "Cor", "valor": "Azul" }, { "eixo": "Tamanho", "valor": "G" }] }`.
 
-**Custo/performance**: `/derivacoes` (com ou sem `?completo=1`) = `2 + N` chamadas à Magazord, `N` = nº de cores ativas, em paralelo; resultado fica em cache no servidor por 1 min (`codigo`+`completo` na chave) e o hook do front cacheia 5 min. `/midia` = 2 chamadas, mesmo cache. Erro da Magazord (ex: `/midia` de derivação inexistente) → `502` `magazord_midia_failed` / `magazord_derivacoes_failed`.
+**Exemplo** (`GET /produtos/MCMHDD-49/midia`, cor "Vermelho" — 2 fotos específicas + 4 genéricas do produto):
+```json
+[
+  { "url": ".../9566/...-vermelho-still.jpg", "especifica": true,  "ordem": 1, "alt": "...", "tipo": 1 },
+  { "url": ".../9559/...-vermelho.jpg",        "especifica": true,  "ordem": 2, "alt": "...", "tipo": 1 },
+  { "url": ".../6405/...-sort1.jpg",           "especifica": false, "ordem": 3, "alt": "...", "tipo": 1 },
+  { "url": ".../5256/...-removebg-preview.png","especifica": false, "ordem": 4, "alt": "...", "tipo": 1 }
+]
+```
+
+**Custo/performance**: `/derivacoes` (com ou sem `?completo=1`) = `2 + N` chamadas à Magazord, `N` = nº de cores ativas, em paralelo; resultado fica em cache no servidor por 1 min (`codigo`+`completo` na chave) e o hook do front cacheia 5 min. `/midia` = **1 chamada** (mesmo feed do `?completo=1`), mesmo cache. Erro da Magazord (ex: `/midia` de derivação inexistente) → `502` `magazord_midia_failed` / `magazord_derivacoes_failed`.
 - **`GET /produtos/:codigo/caracteristicas`** — ficha técnica/descrição de um produto, da tabela `produto_caracteristicas` (mantida em dia pelo upsert best-effort do `GET /produtos/:codigo`). **Pública** (o player mostra isso). Antes o front lia a tabela direto no Supabase (RLS); passou pra cá pra a leitura ser sempre pelo backend (service role, shape controlado), sem o front tocar a tabela. `data` pode ser `null` (produto que nunca passou por um lookup) — `200` com `null`, não é erro. Campos: `{ produto_codigo, id_produto_magazord, titulo, descricao, descricao_resumida, marca, categorias, ean, peso, largura, altura, comprimento, atributos, atualizado_em }`. `atributos` é uma lista `{ nome, valor }` de schema variável por categoria de produto (ex: "Composição", "Gramatura") — guardada como JSONB em vez de normalizada, já que é só pra listar/exibir, não pra filtrar por atributo específico. `descricao` é HTML rico (o mesmo texto da página de produto da própria Magazord). `id_produto_magazord` é o id numérico interno da Magazord (diferente do `produto_codigo`, que é a derivação) — guardado pensando numa etapa futura de avaliações, que são indexadas por esse número; não é usado por nada ainda. Linha ausente pra um `produto_codigo` = esse produto nunca passou por um `GET /produtos/:codigo` (não deveria acontecer com produto já numa live, já que adicionar exige buscar antes).
 
 ### Sincronização

@@ -151,6 +151,24 @@ export function getDerivacoes(codigoDerivacao, { completo = false } = {}) {
   );
 }
 
+// Normaliza o array "midias" do feed da vitrine (mesmo formato pra qualquer
+// derivação): junta a(s) foto(s) ESPECÍFICA(S) daquela cor (nivel_relacionamento
+// 1) com as GENÉRICAS do produto pai (nivel_relacionamento 2, ex: fotos de
+// "qualidade"/textura, sem cor nenhuma) — específica primeiro. Usado tanto por
+// getDerivacoes (completo=true, só pega a primeira pra imagem_url) quanto por
+// getMidiasDerivacao (galeria completa).
+function mapMidias(midias, cdn) {
+  return (midias ?? [])
+    .map((m) => ({
+      url: `${cdn}/${m.path}${m.arquivo_nome}`,
+      especifica: m.nivel_relacionamento === 1, // true = só dessa cor; false = genérica do pai
+      ordem: m.ordem ?? 0,
+      alt: m.alt || null,
+      tipo: m.tipo_file, // 1 = imagem
+    }))
+    .sort((a, b) => Number(b.especifica) - Number(a.especifica) || a.ordem - b.ordem);
+}
+
 async function buscarDerivacoes(codigoDerivacao, completo) {
   const detalhe = await getDetalhe(codigoDerivacao);
   if (!detalhe?.codigoProduto) throw new Error(`Derivação ${codigoDerivacao} não encontrada na Magazord`);
@@ -185,54 +203,35 @@ async function buscarDerivacoes(codigoDerivacao, completo) {
       };
       if (!completo) return item;
 
-      const capa =
-        (feed?.midias ?? [])
-          .filter((m) => m.nivel_relacionamento === 1)
-          .sort((a, b) => (a.ordem ?? 0) - (b.ordem ?? 0))[0] ?? (feed?.midias ?? [])[0];
+      // Primeira mídia (específica da cor se tiver; senão já cai pra genérica
+      // do pai — mapMidias já ordena assim).
+      const capa = mapMidias(feed?.midias, cdn)[0];
       return {
         ...item,
         preco: feed?.valor ?? null,
         preco_antigo: feed?.valor_de ?? null,
         desconto_percentual: feed?.percentual_desconto ?? 0,
         estoque: feed?.qtde_estoque ?? null,
-        imagem_url: capa ? `${cdn}/${capa.path}${capa.arquivo_nome}` : null,
+        imagem_url: capa?.url ?? null,
       };
     })
   );
 }
 
 /**
- * Mídias só da derivação informada — rota dedicada da Magazord, traz apenas as
- * fotos daquela cor/variação (não as genéricas da família, que o /v3/.../detail
- * mistura). Resolve o pai por dentro. Buscada sob demanda quando o usuário
- * escolhe a cor no seletor. Rota pública — passa por cacheCurto (1 min).
+ * Mídias da derivação — a(s) foto(s) DESSA cor junto com as genéricas do
+ * produto pai (mesmas que aparecem na página do produto), específica(s)
+ * primeiro. Vem do mesmo feed da vitrine que getDerivacoes(completo=true) usa
+ * — 1 chamada só, sem precisar resolver o pai por fora. Buscada sob demanda
+ * quando o usuário escolhe a cor no seletor. Rota pública — cacheCurto (1 min).
  * @param {string} codigoDerivacao
- * @returns {Promise<{url: string, url_original: string, principal: boolean, ordem: number, alt: string|null, tipo: number}[]>}
+ * @returns {Promise<{url: string, especifica: boolean, ordem: number, alt: string|null, tipo: number}[]>}
  */
 export function getMidiasDerivacao(codigoDerivacao) {
-  return cacheCurto(`midia|${codigoDerivacao}`, () => buscarMidiasDerivacao(codigoDerivacao));
-}
-
-async function buscarMidiasDerivacao(codigoDerivacao) {
-  const detalhe = await getDetalhe(codigoDerivacao);
-  if (!detalhe?.codigoProduto) throw new Error(`Derivação ${codigoDerivacao} não encontrada na Magazord`);
-  const [{ data }, cdn] = await Promise.all([
-    magazordGet(
-      `/v2/site/produto/${encodeURIComponent(detalhe.codigoProduto)}/derivacao/${encodeURIComponent(codigoDerivacao)}/midia`
-    ),
-    getCdnBase(),
-  ]);
-  const abs = (p) => `${cdn}/${String(p || '').replace(/^\/+/, '')}`;
-  return (data.items ?? [])
-    .map((m) => ({
-      url: abs(m.urlConsultaMidia), // versão "medium"
-      url_original: abs(m.urlOriginal), // tamanho cheio
-      principal: !!m.principal,
-      ordem: m.ordem ?? 0,
-      alt: m.midiaAlt || null,
-      tipo: m.midiaTipo, // 1 = imagem
-    }))
-    .sort((a, b) => Number(b.principal) - Number(a.principal) || a.ordem - b.ordem);
+  return cacheCurto(`midia|${codigoDerivacao}`, async () => {
+    const [feed, cdn] = await Promise.all([magazordFrontend(codigoDerivacao), getCdnBase()]);
+    return mapMidias(feed.midias, cdn);
+  });
 }
 
 async function getPreco(codigoDerivacao) {
