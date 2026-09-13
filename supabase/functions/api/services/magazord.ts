@@ -65,13 +65,29 @@ async function getCdnBase() {
 // player anônimo da live consome). Numa live cheia vários espectadores abrem
 // o mesmo produto quase juntos; sem isso, cada um dispara 2+N chamadas à
 // Magazord pro mesmo dado. TTL curto porque preço/estoque mudam durante a live.
+//
+// emVooStore evita "cache stampede": sem isso, N requisições concorrentes com
+// cache frio/vencido disparavam N buscas idênticas em paralelo (cada uma só
+// enxergava o cache ainda vazio). Agora a 1ª chamada guarda a PROMISE em
+// andamento, e quem chega atrás espera essa mesma promise em vez de repetir o
+// fan-out — só 1 busca de verdade por chave, não importa quantos concorrentes.
 const cacheCurtoStore = new Map<string, { ts: number; valor: unknown }>();
-async function cacheCurto<T>(chave: string, produzir: () => Promise<T>, ttlMs = 60_000): Promise<T> {
+const emVooStore = new Map<string, Promise<unknown>>();
+function cacheCurto<T>(chave: string, produzir: () => Promise<T>, ttlMs = 60_000): Promise<T> {
   const hit = cacheCurtoStore.get(chave);
-  if (hit && Date.now() - hit.ts < ttlMs) return hit.valor as T;
-  const valor = await produzir();
-  cacheCurtoStore.set(chave, { ts: Date.now(), valor });
-  return valor;
+  if (hit && Date.now() - hit.ts < ttlMs) return Promise.resolve(hit.valor as T);
+
+  const emVoo = emVooStore.get(chave) as Promise<T> | undefined;
+  if (emVoo) return emVoo;
+
+  const promessa = Promise.resolve(produzir())
+    .then((valor) => {
+      cacheCurtoStore.set(chave, { ts: Date.now(), valor });
+      return valor;
+    })
+    .finally(() => emVooStore.delete(chave)); // erro não fica em cache — próxima chamada tenta de novo
+  emVooStore.set(chave, promessa);
+  return promessa;
 }
 
 async function getEstoque(codigoDerivacao: string) {
