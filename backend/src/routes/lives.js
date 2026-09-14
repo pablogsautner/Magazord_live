@@ -46,6 +46,21 @@ livesRouter.get('/:id/produtos', async (req, res) => {
   res.json(data ?? []);
 });
 
+// Cupons ativos da live, na ordem em que foram criados — o que o player
+// mostra/aplica no checkout. Mesmo motivo do /produtos acima: leitura inicial
+// pelo backend (service role), não RLS direta. Cupom criado/desativado no
+// meio da live continua chegando pelo canal Realtime do Supabase.
+livesRouter.get('/:id/cupons', async (req, res) => {
+  const { data, error } = await getSupabase()
+    .from('cupons')
+    .select('*')
+    .eq('live_id', req.params.id)
+    .eq('ativo', true)
+    .order('created_at');
+  if (error) return res.status(500).json({ error: 'query_failed', message: error.message });
+  res.json(data ?? []);
+});
+
 livesRouter.use(requireUser);
 
 livesRouter.post('/', async (req, res) => {

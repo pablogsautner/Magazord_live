@@ -16,6 +16,29 @@ async function empresaIdDoCupom(cupomId) {
   return data.lives.empresa_id;
 }
 
+// Todos os cupons da live (ativos e inativos) — pro painel do vendedor
+// gerenciar. Antes o front lia `cupons` direto do Supabase (RLS); passou pra
+// cá pra a leitura ser sempre pelo backend, igual /lives/:id/produtos.
+cuponsRouter.get('/', async (req, res) => {
+  const { live_id } = req.query;
+  if (!live_id) return res.status(400).json({ error: 'live_id_obrigatorio' });
+
+  const empresaId = await empresaIdDaLive(live_id).catch(() => null);
+  if (!empresaId) return res.status(404).json({ error: 'live_nao_encontrada' });
+  if (!(await usuarioPertenceAEmpresa(req.user.id, empresaId))) {
+    return res.status(403).json({ error: 'forbidden' });
+  }
+
+  const supabase = getSupabase();
+  const { data, error } = await supabase
+    .from('cupons')
+    .select('*')
+    .eq('live_id', live_id)
+    .order('created_at', { ascending: false });
+  if (error) return res.status(500).json({ error: 'query_failed', message: error.message });
+  res.json(data ?? []);
+});
+
 cuponsRouter.post('/', async (req, res) => {
   const { live_id, codigo, descricao, tipo_desconto, valor_desconto, valido_de, valido_ate, valor_minimo_pedido } = req.body;
 
