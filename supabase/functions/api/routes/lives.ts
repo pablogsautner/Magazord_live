@@ -62,6 +62,33 @@ livesRouter.get('/:id/cupons', async (c) => {
   return c.json(data ?? []);
 });
 
+// Pública de propósito — é isso que o widget instalado no site do cliente
+// (Magazord "Conteúdo de Página Adicional", ou qualquer um dos templates em
+// /ecommerce-widget.html, /tarja-ao-vivo.html, /live-fullscreen.html) chama
+// a cada 20s pra saber se tem live ao vivo AGORA pra essa empresa. Troca o
+// polling direto no Supabase (anon key exposta no HTML) que esses widgets
+// faziam antes — e como o widget só sabe o empresa_id (fixo, nunca muda),
+// nunca mais precisa ser editado quando uma live nova começa ou termina.
+livesRouter.get('/atual', async (c) => {
+  const empresaId = c.req.query('empresa_id');
+  if (!empresaId) return c.json({ error: 'empresa_id_obrigatorio' }, 400);
+
+  const { data, error } = await getSupabase()
+    .from('lives')
+    .select('id, titulo')
+    .eq('empresa_id', empresaId)
+    .eq('status', 'ao_vivo')
+    .order('created_at', { ascending: false })
+    .limit(1);
+
+  // empresa_id mal formado (não-uuid) também cai aqui — devolve "sem live"
+  // em vez de vazar erro de banco pro script rodando no site do cliente.
+  if (error) return c.json({ live_id: null, titulo: null });
+
+  const live = (data as any)?.[0] ?? null;
+  return c.json({ live_id: live?.id ?? null, titulo: live?.titulo ?? null });
+});
+
 livesRouter.use('*', requireUser);
 
 livesRouter.post('/', async (c) => {
@@ -115,7 +142,18 @@ livesRouter.patch('/:id', async (c) => {
 
   const supabase = getSupabase();
   const { data, error } = await supabase.from('lives').update(campos).eq('id', id).select().single();
-  if (error) return c.json({ error: 'update_failed', message: error.message }, 500);
+  if (error) {
+    if (error.code === '23505') {
+      return c.json(
+        {
+          error: 'ja_existe_live_ao_vivo',
+          message: 'Essa empresa já tem uma live ao vivo agora — encerre-a antes de iniciar outra.',
+        },
+        409
+      );
+    }
+    return c.json({ error: 'update_failed', message: error.message }, 500);
+  }
   return c.json(data);
 });
 

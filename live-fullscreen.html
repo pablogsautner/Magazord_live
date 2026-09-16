@@ -76,13 +76,14 @@
 <button class="close-btn" id="closeBtn" style="display:none;">✕</button>
 
 <script>
-  // Só trocar esses dois valores por live/uso.
-  var LIVE_ID = "3e413974-710b-4594-ab4a-f3093fa818ba";
+  // Configuração é feita 1x só: preenche EMPRESA_ID e BACKEND_URL e nunca mais
+  // precisa mexer aqui, mesmo quando uma live nova começar ou terminar — a
+  // página descobre sozinha qual live está ao vivo pra essa empresa.
+  var EMPRESA_ID = "COLOQUE_O_ID_DA_EMPRESA_AQUI";
+  var BACKEND_URL = "COLOQUE_A_URL_DO_BACKEND_AQUI";
   var HOME_URL = "https://www.feiraodetoalhas.com.br/";
 
-  var SUPABASE_URL = "https://dfntnmquqrtdladqtzrb.supabase.co";
-  var SUPABASE_ANON_KEY = "sb_publishable_TrM6xO7E72zznJKd19GjBw_UsduPjrM";
-  var PLAYER_BASE_URL = "https://livoo-live-shop-web-g51v.vercel.app/player/";
+  var PLAYER_BASE_URL = "https://painel.venderiia.com.br/player/";
   var INTERVALO_MS = 20000;
 
   var avisoEl = document.getElementById("aviso");
@@ -93,32 +94,29 @@
     window.location.href = HOME_URL;
   }
 
-  function mostrarIframe() {
+  function mostrarIframe(liveId) {
     if (iframeMostrado) return;
     iframeMostrado = true;
     avisoEl.remove();
     closeBtn.style.display = "block";
 
     var iframe = document.createElement("iframe");
-    iframe.src = PLAYER_BASE_URL + LIVE_ID;
+    iframe.src = PLAYER_BASE_URL + liveId;
     iframe.setAttribute("allow", "autoplay");
     document.body.appendChild(iframe);
   }
 
   function checarStatus() {
-    fetch(SUPABASE_URL + "/rest/v1/lives?id=eq." + LIVE_ID + "&select=status", {
-      headers: { apikey: SUPABASE_ANON_KEY },
-    })
+    fetch(BACKEND_URL + "/lives/atual?empresa_id=" + EMPRESA_ID)
       .then(function (r) { return r.json(); })
-      .then(function (linhas) {
-        var status = linhas[0] && linhas[0].status;
-        if (status === "ao_vivo") {
-          mostrarIframe();
+      .then(function (info) {
+        if (info.live_id) {
+          mostrarIframe(info.live_id);
         } else if (iframeMostrado) {
           // a pessoa já estava assistindo e a live encerrou agora — volta pra loja.
           sairPraLoja();
         } else {
-          // nunca chegou a começar ainda (ou já encerrou antes de abrir) — não deixa entrar.
+          // nenhuma live ao vivo agora pra essa empresa — não deixa entrar.
           sairPraLoja();
         }
       })

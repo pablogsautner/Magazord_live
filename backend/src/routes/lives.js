@@ -61,6 +61,33 @@ livesRouter.get('/:id/cupons', async (req, res) => {
   res.json(data ?? []);
 });
 
+// Pública de propósito — é isso que o widget instalado no site do cliente
+// (Magazord "Conteúdo de Página Adicional", ou qualquer um dos templates em
+// /ecommerce-widget.html, /tarja-ao-vivo.html, /live-fullscreen.html) chama
+// a cada 20s pra saber se tem live ao vivo AGORA pra essa empresa. Troca o
+// polling direto no Supabase (anon key exposta no HTML) que esses widgets
+// faziam antes — e como o widget só sabe o empresa_id (fixo, nunca muda),
+// nunca mais precisa ser editado quando uma live nova começa ou termina.
+livesRouter.get('/atual', async (req, res) => {
+  const { empresa_id } = req.query;
+  if (!empresa_id) return res.status(400).json({ error: 'empresa_id_obrigatorio' });
+
+  const { data, error } = await getSupabase()
+    .from('lives')
+    .select('id, titulo')
+    .eq('empresa_id', empresa_id)
+    .eq('status', 'ao_vivo')
+    .order('created_at', { ascending: false })
+    .limit(1);
+
+  // empresa_id mal formado (não-uuid) também cai aqui — devolve "sem live"
+  // em vez de vazar erro de banco pro script rodando no site do cliente.
+  if (error) return res.json({ live_id: null, titulo: null });
+
+  const live = data?.[0] ?? null;
+  res.json({ live_id: live?.id ?? null, titulo: live?.titulo ?? null });
+});
+
 livesRouter.use(requireUser);
 
 livesRouter.post('/', async (req, res) => {
@@ -113,7 +140,15 @@ livesRouter.patch('/:id', async (req, res) => {
     .select()
     .single();
 
-  if (error) return res.status(500).json({ error: 'update_failed', message: error.message });
+  if (error) {
+    if (error.code === '23505') {
+      return res.status(409).json({
+        error: 'ja_existe_live_ao_vivo',
+        message: 'Essa empresa já tem uma live ao vivo agora — encerre-a antes de iniciar outra.',
+      });
+    }
+    return res.status(500).json({ error: 'update_failed', message: error.message });
+  }
   res.json(data);
 });
 

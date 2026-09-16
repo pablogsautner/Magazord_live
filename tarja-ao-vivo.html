@@ -2,6 +2,10 @@
   Tarja "AO VIVO" — cole logo depois da tag <body> do site. Fica escondida e
   só aparece quando a live estiver com status "ao_vivo" de verdade; em
   qualquer outro status (agendada, encerrada) ela some sozinha.
+
+  Configuração é feita 1x só: preenche EMPRESA_ID e BACKEND_URL lá embaixo no
+  <script> e nunca mais precisa mexer aqui, mesmo quando uma live nova
+  começar ou terminar — o widget descobre sozinho qual live está ao vivo.
 -->
 <a id="tarja-ao-vivo" href="#" target="_top">
   🔴 AO VIVO — clique para assistir agora
@@ -55,24 +59,27 @@
 
 <script>
 (function () {
-  var LIVE_ID = "3e413974-710b-4594-ab4a-f3093fa818ba";
-  var LIVE_PAGE_URL = "https://www.feiraodetoalhas.com.br/live-teste";
-
-  var SUPABASE_URL = "https://dfntnmquqrtdladqtzrb.supabase.co";
-  var SUPABASE_ANON_KEY = "sb_publishable_TrM6xO7E72zznJKd19GjBw_UsduPjrM";
+  // EMPRESA_ID é fixo — não muda nunca, nem quando uma live começa/termina.
+  // O widget pergunta pro backend "tem live ao vivo agora?" a cada 20s, então
+  // não precisa saber o ID de uma live específica de antemão (e nunca fica
+  // desatualizado pra quem já está com a aba aberta quando a live começa).
+  var EMPRESA_ID = "COLOQUE_O_ID_DA_EMPRESA_AQUI";
+  var BACKEND_URL = "COLOQUE_A_URL_DO_BACKEND_AQUI";
+  var LIVE_PAGE_URL_BASE = "https://painel.venderiia.com.br/player/";
   var INTERVALO_MS = 20000;
 
   var tarja = document.getElementById("tarja-ao-vivo");
-  tarja.href = LIVE_PAGE_URL;
 
   function checarStatus() {
-    fetch(SUPABASE_URL + "/rest/v1/lives?id=eq." + LIVE_ID + "&select=status", {
-      headers: { apikey: SUPABASE_ANON_KEY },
-    })
+    fetch(BACKEND_URL + "/lives/atual?empresa_id=" + EMPRESA_ID)
       .then(function (r) { return r.json(); })
-      .then(function (linhas) {
-        var status = linhas[0] && linhas[0].status;
-        tarja.style.display = status === "ao_vivo" ? "block" : "none";
+      .then(function (info) {
+        if (info.live_id) {
+          tarja.href = LIVE_PAGE_URL_BASE + info.live_id;
+          tarja.style.display = "block";
+        } else {
+          tarja.style.display = "none";
+        }
       })
       .catch(function () { /* mantém o estado atual se a checagem falhar */ });
   }
