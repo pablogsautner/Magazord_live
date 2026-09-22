@@ -296,6 +296,10 @@ export async function lookupProduto(codigoDerivacao: string, descontoPixPercentu
     nome: detalhe.nomeProduto,
     imagem_url: imagemPrincipal?.url ?? null,
     preco,
+    preco_cartao: precoCartao,
+    // Cuidado: isso NÃO é "o preço de cartão" — é um campo à parte que a
+    // própria Magazord manda (a promoção "de/por" deles, sem relação com
+    // forma de pagamento). O preço de cartão de verdade é precoCartao acima.
     preco_antigo: precoInfo?.precoAntigo ? Number(precoInfo.precoAntigo) : null,
     estoque,
     url_produto: link ? `${config.magazord.storefrontBaseUrl}/${link}` : null,

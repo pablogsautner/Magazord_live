@@ -18,6 +18,18 @@ syncRouter.post('/live/:liveId', async (c) => {
   }
 
   const supabase = getSupabase();
+
+  // Sem isso, o preço recalculado aqui vinha sem o desconto de Pix (sempre
+  // 0%) — cada "revalidar preço/estoque" derrubava o preço de Pix de volta
+  // pro preço de cartão cheio (achado comparando o histórico de verdade no
+  // banco). Mesma consulta que produtos.ts já faz.
+  const { data: configEmpresa } = await supabase
+    .from('empresa_configuracoes')
+    .select('desconto_pix_percentual')
+    .eq('empresa_id', empresaId)
+    .single();
+  const descontoPix = (configEmpresa as { desconto_pix_percentual?: number } | null)?.desconto_pix_percentual ?? 0;
+
   const { data: produtos, error } = await supabase
     .from('live_products')
     .select('id, produto_codigo')
@@ -28,13 +40,14 @@ syncRouter.post('/live/:liveId', async (c) => {
 
   const resultados = await Promise.allSettled(
     (produtos as any[]).map(async (p) => {
-      const atual = await lookupProduto(p.produto_codigo);
+      const atual = await lookupProduto(p.produto_codigo, descontoPix);
       const { error: updateError } = await supabase
         .from('live_products')
         .update({
           nome: atual.nome,
           imagem_url: atual.imagem_url,
           preco: atual.preco,
+          preco_cartao: atual.preco_cartao,
           estoque: atual.estoque,
           atualizado_em: new Date().toISOString(),
         })
