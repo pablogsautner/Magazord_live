@@ -2,7 +2,7 @@ import { Hono } from 'npm:hono@4';
 import { lookupProduto } from '../services/magazord.ts';
 import { getSupabase } from '../services/supabase.ts';
 import { requireUser } from '../middleware/requireUser.ts';
-import { empresaIdDaLive, usuarioPertenceAEmpresa } from '../services/tenancy.ts';
+import { empresaIdDaLive, usuarioPertenceAEmpresa, descontoPixDaEmpresa } from '../services/tenancy.ts';
 
 export const syncRouter = new Hono();
 syncRouter.use('*', requireUser);
@@ -22,13 +22,8 @@ syncRouter.post('/live/:liveId', async (c) => {
   // Sem isso, o preço recalculado aqui vinha sem o desconto de Pix (sempre
   // 0%) — cada "revalidar preço/estoque" derrubava o preço de Pix de volta
   // pro preço de cartão cheio (achado comparando o histórico de verdade no
-  // banco). Mesma consulta que produtos.ts já faz.
-  const { data: configEmpresa } = await supabase
-    .from('empresa_configuracoes')
-    .select('desconto_pix_percentual')
-    .eq('empresa_id', empresaId)
-    .single();
-  const descontoPix = (configEmpresa as { desconto_pix_percentual?: number } | null)?.desconto_pix_percentual ?? 0;
+  // banco).
+  const descontoPix = await descontoPixDaEmpresa(empresaId);
 
   const { data: produtos, error } = await supabase
     .from('live_products')

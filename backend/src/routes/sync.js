@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { lookupProduto } from '../services/magazord.js';
 import { getSupabase } from '../services/supabase.js';
 import { requireUser } from '../middleware/requireUser.js';
-import { empresaIdDaLive, usuarioPertenceAEmpresa } from '../services/tenancy.js';
+import { empresaIdDaLive, usuarioPertenceAEmpresa, descontoPixDaEmpresa } from '../services/tenancy.js';
 
 export const syncRouter = Router();
 syncRouter.use(requireUser);
@@ -23,13 +23,8 @@ syncRouter.post('/live/:liveId', async (req, res) => {
   // Sem isso, o preço recalculado aqui vinha sem o desconto de Pix (sempre
   // 0%) — cada "revalidar preço/estoque" derrubava o preço de Pix de volta
   // pro preço de cartão cheio (achado comparando o histórico de verdade no
-  // banco). Mesma consulta que produtos.js já faz.
-  const { data: configEmpresa } = await supabase
-    .from('empresa_configuracoes')
-    .select('desconto_pix_percentual')
-    .eq('empresa_id', empresaId)
-    .single();
-  const descontoPix = configEmpresa?.desconto_pix_percentual ?? 0;
+  // banco).
+  const descontoPix = await descontoPixDaEmpresa(empresaId);
 
   const { data: produtos, error } = await supabase
     .from('live_products')

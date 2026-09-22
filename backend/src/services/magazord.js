@@ -122,8 +122,8 @@ async function getEstoqueUnificado(codigoProduto, codigoDerivacaoOriginal) {
  * @property {string|null} swatch_url  Chip de cor, quando o produto tem (raro).
  *
  * @typedef {Derivacao & {
- *   preco: number|null, preco_antigo: number|null, desconto_percentual: number,
- *   estoque: number|null, imagem_url: string|null
+ *   preco: number|null, preco_cartao: number|null, preco_antigo: number|null,
+ *   desconto_percentual: number, estoque: number|null, imagem_url: string|null
  * }} DerivacaoCompleta
  */
 
@@ -158,13 +158,24 @@ function valorLimpo(nomeFilho, nomePai) {
 // Só derivações ativas entram (é o que a página mostra).
 /**
  * @param {string} codigoDerivacao  Qualquer código de derivação do produto.
- * @param {{completo?: boolean}} [opts]
+ * @param {{completo?: boolean, descontoPixPercentual?: number}} [opts]
  * @returns {Promise<Derivacao[] | DerivacaoCompleta[]>}
  */
-export function getDerivacoes(codigoDerivacao, { completo = false } = {}) {
-  return cacheCurto(`deriv|${codigoDerivacao}|${completo ? 'c' : ''}`, () =>
+export async function getDerivacoes(codigoDerivacao, { completo = false, descontoPixPercentual = 0 } = {}) {
+  // O cache guarda só o preço CRU (preco_cartao, sem desconto) — assim o
+  // mesmo cache serve qualquer empresa/usuário, não importa o % de Pix. O
+  // desconto é aplicado por fora, depois do cache, toda vez.
+  const base = await cacheCurto(`deriv|${codigoDerivacao}|${completo ? 'c' : ''}`, () =>
     buscarDerivacoes(codigoDerivacao, completo)
   );
+  if (!completo) return base;
+  return base.map((item) => {
+    const precoCartao = item.preco_cartao;
+    const preco = precoCartao != null
+      ? Number((precoCartao * (1 - descontoPixPercentual / 100)).toFixed(2))
+      : null;
+    return { ...item, preco };
+  });
 }
 
 // Normaliza o array "midias" do feed da vitrine (mesmo formato pra qualquer
@@ -224,7 +235,10 @@ async function buscarDerivacoes(codigoDerivacao, completo) {
       const capa = mapMidias(feed?.midias, cdn)[0];
       return {
         ...item,
-        preco: feed?.valor ?? null,
+        // Cru, sem desconto de Pix — getDerivacoes() aplica por cima depois
+        // do cache. Não confundir com preco_antigo (o "de/por" da própria
+        // Magazord, campo à parte).
+        preco_cartao: feed?.valor ?? null,
         preco_antigo: feed?.valor_de ?? null,
         desconto_percentual: feed?.percentual_desconto ?? 0,
         estoque: feed?.qtde_estoque ?? null,

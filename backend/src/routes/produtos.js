@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { lookupProduto, buscarProdutosPorNome, getDerivacoes, getMidiasDerivacao } from '../services/magazord.js';
 import { requireUser } from '../middleware/requireUser.js';
-import { empresaUnicaDoUsuario } from '../services/tenancy.js';
+import { empresaUnicaDoUsuario, empresaIdDaLive, descontoPixDaEmpresa } from '../services/tenancy.js';
 import { getSupabase } from '../services/supabase.js';
 
 export const produtosRouter = Router();
@@ -17,9 +17,21 @@ export const produtosRouter = Router();
 // vitrine da Magazord. Aceita qualquer derivação, resolve o pai por dentro.
 // `?completo=1` agrega preço/estoque/foto por cor (do mesmo feed, sem chamada
 // extra). Ver getDerivacoes em services/magazord.js pro contrato de resposta.
+// `?live_id=` (opcional) resolve o desconto de Pix da empresa dona da live —
+// sem isso, trocar de cor no seletor mostrava o preço de cartão cheio como
+// se fosse o de Pix (achado testando de verdade: rota pública, sem usuário
+// logado pra descontoPixDoUsuario resolver sozinho).
 produtosRouter.get('/:codigo/derivacoes', async (req, res) => {
   try {
-    res.json(await getDerivacoes(req.params.codigo, { completo: req.query.completo === '1' }));
+    const liveId = req.query.live_id;
+    const empresaId = liveId ? await empresaIdDaLive(liveId).catch(() => null) : null;
+    const desconto = empresaId ? await descontoPixDaEmpresa(empresaId) : 0;
+    res.json(
+      await getDerivacoes(req.params.codigo, {
+        completo: req.query.completo === '1',
+        descontoPixPercentual: desconto,
+      })
+    );
   } catch (err) {
     res.status(502).json({ error: 'magazord_derivacoes_failed', message: err.message });
   }
@@ -57,13 +69,7 @@ produtosRouter.use(requireUser);
 async function descontoPixDoUsuario(userId) {
   const empresaId = await empresaUnicaDoUsuario(userId);
   if (!empresaId) return 0;
-  const supabase = getSupabase();
-  const { data } = await supabase
-    .from('empresa_configuracoes')
-    .select('desconto_pix_percentual')
-    .eq('empresa_id', empresaId)
-    .single();
-  return data?.desconto_pix_percentual ?? 0;
+  return descontoPixDaEmpresa(empresaId);
 }
 
 // Autocomplete por nome, usado enquanto o admin digita no campo de busca.

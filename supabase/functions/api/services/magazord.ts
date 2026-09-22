@@ -139,12 +139,26 @@ function valorLimpo(nomeFilho: string, nomePai: string | null): string | null {
  *
  * Retorno:
  *   Derivacao        = { codigo, nome, ativo, variacoes: {eixo,valor}[], swatch_url }
- *   DerivacaoCompleta = Derivacao & { preco, preco_antigo, desconto_percentual, estoque, imagem_url }
+ *   DerivacaoCompleta = Derivacao & { preco, preco_cartao, preco_antigo, desconto_percentual, estoque, imagem_url }
  */
-export function getDerivacoes(codigoDerivacao: string, { completo = false }: { completo?: boolean } = {}) {
-  return cacheCurto(`deriv|${codigoDerivacao}|${completo ? 'c' : ''}`, () =>
+export async function getDerivacoes(
+  codigoDerivacao: string,
+  { completo = false, descontoPixPercentual = 0 }: { completo?: boolean; descontoPixPercentual?: number } = {}
+) {
+  // O cache guarda só o preço CRU (preco_cartao, sem desconto) — assim o
+  // mesmo cache serve qualquer empresa/usuário, não importa o % de Pix. O
+  // desconto é aplicado por fora, depois do cache, toda vez.
+  const base = await cacheCurto(`deriv|${codigoDerivacao}|${completo ? 'c' : ''}`, () =>
     buscarDerivacoes(codigoDerivacao, completo)
   );
+  if (!completo) return base;
+  return (base as any[]).map((item) => {
+    const precoCartao = item.preco_cartao;
+    const preco = precoCartao != null
+      ? Number((precoCartao * (1 - descontoPixPercentual / 100)).toFixed(2))
+      : null;
+    return { ...item, preco };
+  });
 }
 
 // Normaliza o array "midias" do feed da vitrine (mesmo formato pra qualquer
@@ -203,7 +217,10 @@ async function buscarDerivacoes(codigoDerivacao: string, completo: boolean) {
       const capa = mapMidias(feed?.midias, cdn)[0];
       return {
         ...item,
-        preco: feed?.valor ?? null,
+        // Cru, sem desconto de Pix — getDerivacoes() aplica por cima depois
+        // do cache. Não confundir com preco_antigo (o "de/por" da própria
+        // Magazord, campo à parte).
+        preco_cartao: feed?.valor ?? null,
         preco_antigo: feed?.valor_de ?? null,
         desconto_percentual: feed?.percentual_desconto ?? 0,
         estoque: feed?.qtde_estoque ?? null,

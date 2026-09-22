@@ -38,6 +38,19 @@ export async function empresaIdDoLiveProduct(liveProductId) {
   return data.lives.empresa_id;
 }
 
+// % de desconto no Pix configurado pela empresa (0 se não configurado) —
+// usado em toda chamada que recalcula preço na Magazord (o desconto de Pix
+// não vem de nenhum endpoint deles, é cadastro nosso). Ver empresaConfiguracoes.js.
+export async function descontoPixDaEmpresa(empresaId) {
+  const supabase = getSupabase();
+  const { data } = await supabase
+    .from('empresa_configuracoes')
+    .select('desconto_pix_percentual')
+    .eq('empresa_id', empresaId)
+    .single();
+  return data?.desconto_pix_percentual ?? 0;
+}
+
 export async function empresaIdDoComentario(comentarioId) {
   const supabase = getSupabase();
   const { data, error } = await supabase

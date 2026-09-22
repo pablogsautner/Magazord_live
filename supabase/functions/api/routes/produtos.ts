@@ -1,7 +1,7 @@
 import { Hono } from 'npm:hono@4';
 import { lookupProduto, buscarProdutosPorNome, getDerivacoes, getMidiasDerivacao } from '../services/magazord.ts';
 import { requireUser } from '../middleware/requireUser.ts';
-import { empresaUnicaDoUsuario } from '../services/tenancy.ts';
+import { empresaUnicaDoUsuario, empresaIdDaLive, descontoPixDaEmpresa } from '../services/tenancy.ts';
 import { getSupabase } from '../services/supabase.ts';
 
 export const produtosRouter = new Hono();
@@ -17,9 +17,21 @@ export const produtosRouter = new Hono();
 // vitrine da Magazord. Aceita qualquer derivação, resolve o pai por dentro.
 // `?completo=1` agrega preço/estoque/foto por cor (do mesmo feed, sem chamada
 // extra). Ver getDerivacoes em services/magazord.ts pro contrato de resposta.
+// `?live_id=` (opcional) resolve o desconto de Pix da empresa dona da live —
+// sem isso, trocar de cor no seletor mostrava o preço de cartão cheio como
+// se fosse o de Pix (achado testando de verdade: rota pública, sem usuário
+// logado pra descontoPixDoUsuario resolver sozinho).
 produtosRouter.get('/:codigo/derivacoes', async (c) => {
   try {
-    return c.json(await getDerivacoes(c.req.param('codigo'), { completo: c.req.query('completo') === '1' }));
+    const liveId = c.req.query('live_id');
+    const empresaId = liveId ? await empresaIdDaLive(liveId).catch(() => null) : null;
+    const desconto = empresaId ? await descontoPixDaEmpresa(empresaId) : 0;
+    return c.json(
+      await getDerivacoes(c.req.param('codigo'), {
+        completo: c.req.query('completo') === '1',
+        descontoPixPercentual: desconto,
+      })
+    );
   } catch (err) {
     return c.json({ error: 'magazord_derivacoes_failed', message: (err as Error).message }, 502);
   }
@@ -56,13 +68,7 @@ produtosRouter.use('*', requireUser);
 async function descontoPixDoUsuario(userId: string) {
   const empresaId = await empresaUnicaDoUsuario(userId);
   if (!empresaId) return 0;
-  const supabase = getSupabase();
-  const { data } = await supabase
-    .from('empresa_configuracoes')
-    .select('desconto_pix_percentual')
-    .eq('empresa_id', empresaId)
-    .single();
-  return (data as any)?.desconto_pix_percentual ?? 0;
+  return descontoPixDaEmpresa(empresaId);
 }
 
 produtosRouter.get('/buscar', async (c) => {
