@@ -38,6 +38,10 @@ export async function audienciaWebrtc(liveId) {
   // cor (não é escalável — trocar de VPS/região viraria deploy de front) —
   // pega ela daqui, igual o publish já devolve `whip.url` pronto.
   const whepUrl = `${config.streaming.serverPublicUrl}/rtc/v1/whep/?app=live&stream=${liveId}`;
-  if (!stream || !stream.live) return { ao_vivo: false, espectadores: null, whep_url: whepUrl };
-  return { ao_vivo: true, espectadores: stream.viewers?.length ?? null, whep_url: whepUrl };
+  // hls_url junto do whep_url, mesmo raciocínio: o front não deve montar isso
+  // sozinho. Fica no mesmo host do WHEP (GET /live/<id>.m3u8, servido pelo
+  // auth/server.js na VPS) — sem CDN por enquanto, ver plano.
+  const hlsUrl = `${config.streaming.serverPublicUrl}/live/${liveId}.m3u8`;
+  if (!stream || !stream.live) return { ao_vivo: false, espectadores: null, whep_url: whepUrl, hls_url: hlsUrl };
+  return { ao_vivo: true, espectadores: stream.viewers?.length ?? null, whep_url: whepUrl, hls_url: hlsUrl };
 }
