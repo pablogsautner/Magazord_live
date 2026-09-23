@@ -23,10 +23,12 @@ export function mintPublishToken({
   liveId,
   empresaId,
   ttlSeconds,
+  forward,
 }: {
   liveId: string;
   empresaId: string;
   ttlSeconds: number;
+  forward?: string | null;
 }) {
   const agora = Math.floor(Date.now() / 1000);
   const payload = {
@@ -36,6 +38,11 @@ export function mintPublishToken({
     stream: liveId,
     iat: agora,
     exp: agora + ttlSeconds,
+    // Destino de simulcast (forward RTMP, ex: TikTok) — só presente quando a
+    // live tem multicanal configurado. O hook on_forward do auth/server.js
+    // (VPS) decodifica esse mesmo token pra saber pra onde encaminhar, sem
+    // precisar bater no banco por lá.
+    ...(forward ? { forward } : {}),
   };
   const payloadBase64Url = Buffer.from(JSON.stringify(payload)).toString('base64url');
   const assinatura = assinar(payloadBase64Url);

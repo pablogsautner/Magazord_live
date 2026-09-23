@@ -49,6 +49,22 @@ export async function descontoPixDaEmpresa(empresaId: string) {
   return (data as { desconto_pix_percentual?: number } | null)?.desconto_pix_percentual ?? 0;
 }
 
+// URL de forward RTMP pronta (server_url + stream_key já concatenados) se a
+// live tiver multicanal (simulcast) configurado, senão null. Ver
+// mintPublishToken/POST /:liveId/publish-token.
+export async function destinoMulticanalDaLive(liveId: string) {
+  const supabase = getSupabase();
+  const { data } = await supabase
+    .from('lives')
+    .select('multicanal_rtmp_server_url, multicanal_rtmp_stream_key')
+    .eq('id', liveId)
+    .single();
+  const row = data as { multicanal_rtmp_server_url?: string | null; multicanal_rtmp_stream_key?: string | null } | null;
+  const serverUrl = row?.multicanal_rtmp_server_url;
+  const streamKey = row?.multicanal_rtmp_stream_key;
+  return serverUrl && streamKey ? `${serverUrl}/${streamKey}` : null;
+}
+
 export async function empresaIdDoComentario(comentarioId: string) {
   const supabase = getSupabase();
   const { data, error } = await supabase

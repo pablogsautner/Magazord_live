@@ -18,7 +18,7 @@ function assinar(payloadBase64Url) {
 // local, sem bater no nosso banco a cada tentativa de conexão. Cobre só o
 // handshake de conexão, não a transmissão inteira: uma reconexão (queda de
 // rede, restart do OBS) precisa mintar um token novo, não reaproveitar este.
-export function mintPublishToken({ liveId, empresaId, ttlSeconds }) {
+export function mintPublishToken({ liveId, empresaId, ttlSeconds, forward }) {
   const agora = Math.floor(Date.now() / 1000);
   const payload = {
     live_id: liveId,
@@ -27,6 +27,11 @@ export function mintPublishToken({ liveId, empresaId, ttlSeconds }) {
     stream: liveId,
     iat: agora,
     exp: agora + ttlSeconds,
+    // Destino de simulcast (forward RTMP, ex: TikTok) — só presente quando a
+    // live tem multicanal configurado. O hook on_forward do auth/server.js
+    // (VPS) decodifica esse mesmo token pra saber pra onde encaminhar, sem
+    // precisar bater no banco por lá.
+    ...(forward ? { forward } : {}),
   };
   const payloadBase64Url = Buffer.from(JSON.stringify(payload)).toString('base64url');
   const assinatura = assinar(payloadBase64Url);

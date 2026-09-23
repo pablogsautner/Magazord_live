@@ -121,7 +121,7 @@ livesRouter.patch('/:id', async (req, res) => {
     return res.status(403).json({ error: 'forbidden' });
   }
 
-  const { titulo, youtube_video_id, status } = req.body;
+  const { titulo, youtube_video_id, status, multicanal_rtmp_server_url, multicanal_rtmp_stream_key } = req.body;
   const STATUS_VALIDOS = ['agendada', 'ao_vivo', 'encerrada'];
   if (status !== undefined && !STATUS_VALIDOS.includes(status)) {
     return res.status(400).json({ error: 'status_invalido', message: `status deve ser um de: ${STATUS_VALIDOS.join(', ')}` });
@@ -131,6 +131,10 @@ livesRouter.patch('/:id', async (req, res) => {
   if (titulo !== undefined) campos.titulo = titulo;
   if (youtube_video_id !== undefined) campos.youtube_video_id = youtube_video_id;
   if (status !== undefined) campos.status = status;
+  // Destino opcional de simulcast (forward RTMP) — null limpa o destino. Ver
+  // destinoMulticanalDaLive/mintPublishToken.
+  if (multicanal_rtmp_server_url !== undefined) campos.multicanal_rtmp_server_url = multicanal_rtmp_server_url;
+  if (multicanal_rtmp_stream_key !== undefined) campos.multicanal_rtmp_stream_key = multicanal_rtmp_stream_key;
 
   const supabase = getSupabase();
   const { data, error } = await supabase

@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { config } from '../config.js';
 import { requireUser } from '../middleware/requireUser.js';
-import { empresaIdDaLive, usuarioPertenceAEmpresa } from '../services/tenancy.js';
+import { empresaIdDaLive, usuarioPertenceAEmpresa, destinoMulticanalDaLive } from '../services/tenancy.js';
 import { mintPublishToken, portaRtmpDaLive } from '../services/streamAuth.js';
 
 export const liveStreamRouter = Router();
@@ -22,7 +22,10 @@ liveStreamRouter.post('/:liveId/publish-token', async (req, res) => {
     return res.status(403).json({ error: 'forbidden' });
   }
 
-  const whip = mintPublishToken({ liveId, empresaId, ttlSeconds: TTL_WHIP_SEGUNDOS });
+  // Só o WHIP (único caminho de publish usado hoje pelo front) carrega o
+  // destino de multicanal — ver mintPublishToken/destinoMulticanalDaLive.
+  const forward = await destinoMulticanalDaLive(liveId);
+  const whip = mintPublishToken({ liveId, empresaId, ttlSeconds: TTL_WHIP_SEGUNDOS, forward });
   const rtmp = mintPublishToken({ liveId, empresaId, ttlSeconds: TTL_RTMP_SEGUNDOS });
 
   res.json({

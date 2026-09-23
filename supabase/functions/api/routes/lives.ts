@@ -129,16 +129,20 @@ livesRouter.patch('/:id', async (c) => {
     return c.json({ error: 'forbidden' }, 403);
   }
 
-  const { titulo, youtube_video_id, status } = await c.req.json();
+  const { titulo, youtube_video_id, status, multicanal_rtmp_server_url, multicanal_rtmp_stream_key } = await c.req.json();
   const STATUS_VALIDOS = ['agendada', 'ao_vivo', 'encerrada'];
   if (status !== undefined && !STATUS_VALIDOS.includes(status)) {
     return c.json({ error: 'status_invalido', message: `status deve ser um de: ${STATUS_VALIDOS.join(', ')}` }, 400);
   }
 
-  const campos: Record<string, string> = {};
+  const campos: Record<string, string | null> = {};
   if (titulo !== undefined) campos.titulo = titulo;
   if (youtube_video_id !== undefined) campos.youtube_video_id = youtube_video_id;
   if (status !== undefined) campos.status = status;
+  // Destino opcional de simulcast (forward RTMP) — null limpa o destino. Ver
+  // destinoMulticanalDaLive/mintPublishToken.
+  if (multicanal_rtmp_server_url !== undefined) campos.multicanal_rtmp_server_url = multicanal_rtmp_server_url;
+  if (multicanal_rtmp_stream_key !== undefined) campos.multicanal_rtmp_stream_key = multicanal_rtmp_stream_key;
 
   const supabase = getSupabase();
   const { data, error } = await supabase.from('lives').update(campos).eq('id', id).select().single();

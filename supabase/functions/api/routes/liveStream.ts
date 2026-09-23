@@ -1,7 +1,7 @@
 import { Hono } from 'npm:hono@4';
 import { config } from '../config.ts';
 import { requireUser } from '../middleware/requireUser.ts';
-import { empresaIdDaLive, usuarioPertenceAEmpresa } from '../services/tenancy.ts';
+import { empresaIdDaLive, usuarioPertenceAEmpresa, destinoMulticanalDaLive } from '../services/tenancy.ts';
 import { mintPublishToken, portaRtmpDaLive } from '../services/streamAuth.ts';
 
 export const liveStreamRouter = new Hono();
@@ -23,7 +23,10 @@ liveStreamRouter.post('/:liveId/publish-token', async (c) => {
     return c.json({ error: 'forbidden' }, 403);
   }
 
-  const whip = await mintPublishToken({ liveId, empresaId, ttlSeconds: TTL_WHIP_SEGUNDOS });
+  // Só o WHIP (único caminho de publish usado hoje pelo front) carrega o
+  // destino de multicanal — ver mintPublishToken/destinoMulticanalDaLive.
+  const forward = await destinoMulticanalDaLive(liveId);
+  const whip = await mintPublishToken({ liveId, empresaId, ttlSeconds: TTL_WHIP_SEGUNDOS, forward });
   const rtmp = await mintPublishToken({ liveId, empresaId, ttlSeconds: TTL_RTMP_SEGUNDOS });
 
   return c.json({
